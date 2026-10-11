@@ -1,0 +1,85 @@
+# Ad ogni push su main:
+#  - compila la versione web e la pubblica su GitHub Pages (visibile dal telefono)
+#  - compila l'APK Android e lo allega alla release "anteprima"
+# Le chiavi Supabase (facoltative) vanno nei Secrets del repository:
+#   SUPABASE_URL, SUPABASE_ANON_KEY  -> senza, l'app parte in modalita' demo.
+name: Build e pubblicazione
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.47.6
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter test
+      - name: Build web
+        run: >
+          flutter build web --release
+          --base-href "/${{ github.event.repository.name }}/"
+          --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy-web:
+    needs: web
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build APK
+        run: >
+          flutter build apk --release
+          --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+      - run: mv build/app/outputs/flutter-apk/app-release.apk build/the-mans-house.apk
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: anteprima
+          name: Anteprima (ultima build)
+          prerelease: true
+          files: build/the-mans-house.apk
+          body: |
+            APK di test generato automaticamente dall'ultimo aggiornamento.
+            Scaricalo dal telefono Android e installalo (consenti "origini sconosciute").
