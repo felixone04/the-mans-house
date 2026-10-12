@@ -221,15 +221,17 @@ create policy "appointments admin" on public.appointments for all using (public.
 -- ---------------------------------------------------------------------
 
 -- Intervalli occupati (appuntamenti confermati + ferie), senza dati personali.
+-- is_time_off distingue le ferie dal lavoro (carico del "primo disponibile").
+drop function if exists public.get_busy_intervals(timestamptz, timestamptz);
 create or replace function public.get_busy_intervals(p_from timestamptz, p_to timestamptz)
-returns table (barber_id uuid, start_at timestamptz, end_at timestamptz)
+returns table (barber_id uuid, start_at timestamptz, end_at timestamptz, is_time_off boolean)
 language sql stable security definer set search_path = public
 as $$
-  select a.barber_id, a.start_at, a.end_at
+  select a.barber_id, a.start_at, a.end_at, false
     from public.appointments a
    where a.status = 'confirmed' and a.start_at < p_to and a.end_at > p_from
   union all
-  select t.barber_id, t.start_at, t.end_at
+  select t.barber_id, t.start_at, t.end_at, true
     from public.barber_time_off t
    where t.start_at < p_to and t.end_at > p_from;
 $$;

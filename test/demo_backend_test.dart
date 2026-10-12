@@ -19,15 +19,20 @@ void main() {
     final busy = await backend.fetchBusy(from, from.add(const Duration(days: 15)));
     for (var i = 0; i < 15; i++) {
       final day = DateTime(from.year, from.month, from.day + i);
-      final slots = availableSlots(barber: b, durationMin: s.durationMin, day: day, busy: busy, stepMin: 15)
-          .where((t) => t.isAfter(after));
+      final slots = availableSlots(
+        barber: b,
+        durationMin: s.durationMin,
+        day: day,
+        busy: busy,
+        stepMin: 15,
+      ).where((t) => t.isAfter(after));
       if (slots.isNotEmpty) return slots.first;
     }
     throw StateError('nessun orario libero');
   }
 
-  Future<void> signUp(String email) => backend.signUpWithEmail(
-      email: email, password: 'segreta1', fullName: 'Mario Rossi', phone: '333 1234567');
+  Future<void> signUp(String email) =>
+      backend.signUpWithEmail(email: email, password: 'segreta1', fullName: 'Mario Rossi', phone: '333 1234567');
 
   test('registrazione: telefono normalizzato, email duplicata e password corta rifiutate', () async {
     await signUp('mario@test.it');
@@ -39,8 +44,9 @@ void main() {
     expect(backend.isSignedIn, isFalse);
     await expectLater(() => signUp('MARIO@test.it'), throwsA(isA<AppException>()));
     await expectLater(
-        () => backend.signUpWithEmail(email: 'x@test.it', password: '123', fullName: 'X', phone: '3331234567'),
-        throwsA(isA<AppException>()));
+      () => backend.signUpWithEmail(email: 'x@test.it', password: '123', fullName: 'X', phone: '3331234567'),
+      throwsA(isA<AppException>()),
+    );
   });
 
   test('login: password errata rifiutata, admin riconosciuto', () async {
@@ -69,29 +75,40 @@ void main() {
     expect((await backend.myAppointments()).map((x) => x.id), contains(a.id));
 
     // stesso orario o sovrapposto: rifiutato
-    await expectLater(() => backend.book(barberId: barber.id, serviceId: service.id, start: start),
-        throwsA(isA<AppException>()));
     await expectLater(
-        () => backend.book(
-            barberId: barber.id, serviceId: service.id, start: start.add(const Duration(minutes: 10))),
-        throwsA(isA<AppException>()));
+      () => backend.book(barberId: barber.id, serviceId: service.id, start: start),
+      throwsA(isA<AppException>()),
+    );
+    await expectLater(
+      () => backend.book(barberId: barber.id, serviceId: service.id, start: start.add(const Duration(minutes: 10))),
+      throwsA(isA<AppException>()),
+    );
     // passato
     await expectLater(
-        () => backend.book(
-            barberId: barber.id, serviceId: service.id, start: DateTime.now().subtract(const Duration(hours: 1))),
-        throwsA(isA<AppException>()));
+      () => backend.book(
+        barberId: barber.id,
+        serviceId: service.id,
+        start: DateTime.now().subtract(const Duration(hours: 1)),
+      ),
+      throwsA(isA<AppException>()),
+    );
     // fuori orario (alle 3 di notte)
     final night = DateTime(start.year, start.month, start.day, 3);
-    await expectLater(() => backend.book(barberId: barber.id, serviceId: service.id, start: night),
-        throwsA(isA<AppException>()));
+    await expectLater(
+      () => backend.book(barberId: barber.id, serviceId: service.id, start: night),
+      throwsA(isA<AppException>()),
+    );
   });
 
   test('prenotazione: orario non multiplo di 5 minuti accettato se libero', () async {
     // con "Intervallo orari" = 7 min gli slot cadono su 9:07, 9:14, ...
     await backend.signInWithEmail(DemoBackend.adminEmail, DemoBackend.adminPassword);
-    await backend.saveBarber(Barber(name: 'Prova', hours: [
-      for (var d = 1; d <= 7; d++) WorkingHours(weekday: d, start: 9 * 60, end: 13 * 60),
-    ]));
+    await backend.saveBarber(
+      Barber(
+        name: 'Prova',
+        hours: [for (var d = 1; d <= 7; d++) WorkingHours(weekday: d, start: 9 * 60, end: 13 * 60)],
+      ),
+    );
     final barber = (await backend.fetchBarbers()).firstWhere((b) => b.name == 'Prova');
     final service = (await backend.fetchServices()).first;
     final t = DateTime.now().add(const Duration(days: 1));
@@ -107,8 +124,10 @@ void main() {
     final start = await freeSlot(barber, service, DateTime.now().add(const Duration(hours: 3)));
     final d = dayOnly(start);
     await backend.addTimeOff(TimeOff(barberId: barber.id, start: d, end: d.add(const Duration(days: 1))));
-    await expectLater(() => backend.book(barberId: barber.id, serviceId: service.id, start: start),
-        throwsA(isA<AppException>()));
+    await expectLater(
+      () => backend.book(barberId: barber.id, serviceId: service.id, start: start),
+      throwsA(isA<AppException>()),
+    );
   });
 
   test('prenotazione: data oltre il limite rifiutata al cliente', () async {
@@ -116,10 +135,11 @@ void main() {
     final settings = await backend.fetchSettings();
     final barber = (await backend.fetchBarbers()).first;
     final service = (await backend.fetchServices()).first;
-    final far = await freeSlot(
-        barber, service, DateTime.now().add(Duration(days: settings.bookingDaysAhead + 2)));
-    await expectLater(() => backend.book(barberId: barber.id, serviceId: service.id, start: far),
-        throwsA(isA<AppException>()));
+    final far = await freeSlot(barber, service, DateTime.now().add(Duration(days: settings.bookingDaysAhead + 2)));
+    await expectLater(
+      () => backend.book(barberId: barber.id, serviceId: service.id, start: far),
+      throwsA(isA<AppException>()),
+    );
   });
 
   test('admin: prenotazione per un cliente senza account', () async {
@@ -128,7 +148,12 @@ void main() {
     final service = (await backend.fetchServices()).first;
     final start = await freeSlot(barber, service, DateTime.now().add(const Duration(hours: 3)));
     final a = await backend.book(
-        barberId: barber.id, serviceId: service.id, start: start, customerName: 'Telefonico', customerPhone: '');
+      barberId: barber.id,
+      serviceId: service.id,
+      start: start,
+      customerName: 'Telefonico',
+      customerPhone: '',
+    );
     expect(a.userId, isNull);
     expect(a.createdByAdmin, isTrue);
     expect(a.customerName, 'Telefonico');
@@ -182,6 +207,54 @@ void main() {
     await expectLater(() => backend.signInWithEmail('via@test.it', 'segreta1'), throwsA(isA<AppException>()));
     final busy = await backend.fetchBusy(start, start.add(const Duration(minutes: 1)));
     expect(busy.where((x) => x.barberId == barber.id), isEmpty);
+  });
+
+  test('primo disponibile: la prenotazione va al barbiere assegnato, ferie escluse', () async {
+    await signUp('primo@test.it');
+    final barbers = await backend.fetchBarbers();
+    final service = (await backend.fetchServices()).first;
+    final tomorrow = dayOnly(DateTime.now()).add(const Duration(days: 1));
+    // trova un giorno lavorativo con orari liberi nei prossimi 10 giorni
+    for (var i = 0; i < 10; i++) {
+      final day = DateTime(tomorrow.year, tomorrow.month, tomorrow.day + i);
+      var busy = await backend.fetchBusy(day, day.add(const Duration(days: 1)));
+      var map = availableSlotsAnyBarber(
+        barbers: barbers,
+        durationMin: service.durationMin,
+        day: day,
+        busy: busy,
+        stepMin: 15,
+      );
+      if (map.isEmpty) continue;
+
+      // ferie di un giorno per il barbiere assegnato al primo orario: non deve piu' essere scelto
+      final first = map.keys.first;
+      final assigned = map[first]!;
+      await backend.signOut();
+      await backend.signInWithEmail(DemoBackend.adminEmail, DemoBackend.adminPassword);
+      await backend.addTimeOff(TimeOff(barberId: assigned.id, start: day, end: day.add(const Duration(days: 1))));
+      await backend.signOut();
+      await backend.signInWithEmail('primo@test.it', 'segreta1');
+      busy = await backend.fetchBusy(day, day.add(const Duration(days: 1)));
+      expect(busy.where((b) => b.timeOff && b.barberId == assigned.id), isNotEmpty);
+      map = availableSlotsAnyBarber(
+        barbers: barbers,
+        durationMin: service.durationMin,
+        day: day,
+        busy: busy,
+        stepMin: 15,
+      );
+      expect(map.values.any((b) => b.id == assigned.id), isFalse);
+      if (map.isEmpty) continue;
+
+      final slot = map.keys.first;
+      final appt = await backend.book(barberId: map[slot]!.id, serviceId: service.id, start: slot);
+      expect(appt.barberId, map[slot]!.id);
+      final mine = await backend.myAppointments();
+      expect(mine.any((a) => a.id == appt.id && a.barberId == map[slot]!.id), isTrue);
+      return;
+    }
+    fail('nessun giorno con orari liberi');
   });
 
   test('amministratori: email aggiunta diventa admin', () async {

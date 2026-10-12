@@ -15,7 +15,6 @@ class SettingsTab extends StatefulWidget {
 }
 
 class _SettingsTabState extends State<SettingsTab> {
-  final _form = GlobalKey<FormState>();
   late ShopSettings _s;
   final _c = <String, TextEditingController>{};
   List<String> _admins = [];
@@ -55,7 +54,6 @@ class _SettingsTabState extends State<SettingsTab> {
   }
 
   Future<void> _save() async {
-    if (!_form.currentState!.validate()) return;
     _s
       ..name = _c['name']!.text.trim()
       ..tagline = _c['tagline']!.text.trim()
@@ -107,8 +105,13 @@ class _SettingsTabState extends State<SettingsTab> {
   }
 
   Future<void> _removeAdmin(String email) async {
-    final ok = await confirmDialog(context,
-        title: 'Rimuovere amministratore?', message: email, confirm: 'Rimuovi', destructive: true);
+    final ok = await confirmDialog(
+      context,
+      title: 'Rimuovere amministratore?',
+      message: email,
+      confirm: 'Rimuovi',
+      destructive: true,
+    );
     if (!ok || !mounted) return;
     try {
       await AppScope.read(context).backend.removeAdminEmail(email);
@@ -118,7 +121,8 @@ class _SettingsTabState extends State<SettingsTab> {
     }
   }
 
-  Widget _field(String key, String label, {IconData? icon, int lines = 1, TextInputType? type, String? hint}) => Padding(
+  Widget _field(String key, String label, {IconData? icon, int lines = 1, TextInputType? type, String? hint}) =>
+      Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: TextFormField(
           controller: _c[key],
@@ -129,31 +133,111 @@ class _SettingsTabState extends State<SettingsTab> {
       );
 
   Widget _number(String key, String label, String suffix, int min, int max) => Expanded(
-        child: TextFormField(
-          controller: _c[key],
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: InputDecoration(labelText: label, suffixText: suffix),
-          validator: (v) {
-            final n = int.tryParse(v ?? '');
-            return n == null || n < min || n > max ? '$min–$max' : null;
-          },
+    child: TextFormField(
+      controller: _c[key],
+      keyboardType: TextInputType.number,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      decoration: InputDecoration(labelText: label, suffixText: suffix),
+      validator: (v) {
+        final n = int.tryParse(v ?? '');
+        return n == null || n < min || n > max ? '$min–$max' : null;
+      },
+    ),
+  );
+
+  /// Annulla le modifiche non salvate nei campi.
+  void _resetFields() {
+    _c['name']!.text = _s.name;
+    _c['tagline']!.text = _s.tagline;
+    _c['address']!.text = _s.address;
+    _c['maps']!.text = _s.mapsUrl;
+    _c['phone']!.text = _s.phone;
+    _c['whatsapp']!.text = _s.whatsapp;
+    _c['instagram']!.text = _s.instagram;
+    _c['step']!.text = '${_s.slotStepMin}';
+    _c['days']!.text = '${_s.bookingDaysAhead}';
+    _c['cancel']!.text = '${_s.minCancelHours}';
+  }
+
+  /// Sezione modificabile in un pannello: la pagina resta senza scorrimento.
+  Future<void> _editSection(String title, List<Widget> fields) async {
+    final form = GlobalKey<FormState>();
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: 460,
+          child: Form(
+            key: form,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: fields),
+            ),
+          ),
         ),
-      );
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Annulla')),
+          FilledButton(
+            onPressed: () {
+              if (form.currentState!.validate()) Navigator.pop(c, true);
+            },
+            child: const Text('Salva'),
+          ),
+        ],
+      ),
+    );
+    if (saved == true) {
+      await _save();
+    } else {
+      _resetFields();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
     final myEmail = state.profile?.email.toLowerCase();
-    return Form(
-      key: _form,
-      child: ListView(
-        padding: const EdgeInsets.only(bottom: 32),
+
+    Widget tile(IconData icon, String title, String subtitle, {VoidCallback? onTap, Widget? trailing}) => GlassCard(
+      margin: const EdgeInsets.only(bottom: 10),
+      onTap: onTap,
+      child: Row(
         children: [
-          ResponsiveCenter(
-            maxWidth: 800,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              const SectionTitle('Il locale'),
+          Icon(icon, color: AppColors.silver),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: AppColors.muted, fontSize: 12.5),
+                ),
+              ],
+            ),
+          ),
+          trailing ?? const Icon(Icons.chevron_right, color: AppColors.muted),
+        ],
+      ),
+    );
+
+    return FitBody(
+      maxWidth: 800,
+      alignment: Alignment.topCenter,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 12),
+          tile(
+            Icons.storefront_outlined,
+            'Il locale',
+            '${_s.name} · ${_s.address}',
+            onTap: () => _editSection('Il locale', [
               _field('name', 'Nome', icon: Icons.storefront_outlined),
               _field('tagline', 'Sottotitolo', icon: Icons.short_text),
               _field('address', 'Indirizzo', icon: Icons.location_on_outlined),
@@ -161,59 +245,70 @@ class _SettingsTabState extends State<SettingsTab> {
               _field('phone', 'Telefono', icon: Icons.call_outlined, type: TextInputType.phone),
               _field('whatsapp', 'WhatsApp del negozio', icon: Icons.chat_outlined, type: TextInputType.phone),
               _field('instagram', 'Instagram', icon: Icons.camera_alt_outlined, hint: 'nomeutente'),
-              const SectionTitle('Prenotazioni'),
-              Row(children: [
-                _number('step', 'Intervallo orari', 'min', 5, 120),
-                const SizedBox(width: 10),
-                _number('days', 'Prenotabile fino a', 'giorni', 1, 365),
-                const SizedBox(width: 10),
-                _number('cancel', 'Annullabile fino a', 'ore prima', 0, 72),
-              ]),
-              const SectionTitle('Promemoria WhatsApp'),
-              GlassCard(
-                padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
-                child: SwitchListTile(
-                  value: _s.remindersEnabled,
-                  onChanged: (v) => setState(() => _s.remindersEnabled = v),
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Invio automatico promemoria'),
-                  subtitle: const Text('24 ore e 1 ora prima di ogni appuntamento',
-                      style: TextStyle(color: AppColors.muted, fontSize: 12.5)),
-                ),
-              ),
-              const SizedBox(height: 20),
-              PrimaryButton(label: 'Salva impostazioni', loading: _saving, onPressed: _save),
-              SectionTitle(
-                'Amministratori',
-                trailing: TextButton.icon(onPressed: _addAdmin, icon: const Icon(Icons.add, size: 18), label: const Text('Aggiungi')),
-              ),
-              for (final e in _admins)
-                GlassCard(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
-                  child: Row(children: [
-                    const Icon(Icons.admin_panel_settings_outlined, color: AppColors.muted),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text(e)),
-                    if (e != myEmail)
-                      IconButton(onPressed: () => _removeAdmin(e), icon: const Icon(Icons.close))
-                    else
-                      const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: Text('tu', style: TextStyle(color: AppColors.muted)),
-                      ),
-                  ]),
-                ),
-              if (state.backend.isDemo) ...[
-                const SizedBox(height: 20),
-                const Text(
-                  'Modalità demo: i dati sono locali e si azzerano alla chiusura dell\'app.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: AppColors.warning, fontSize: 12.5),
-                ),
-              ],
             ]),
           ),
+          tile(
+            Icons.event_note_outlined,
+            'Prenotazioni',
+            'Orari ogni ${_s.slotStepMin} min · prenotabile fino a ${_s.bookingDaysAhead} giorni · '
+                'annullabile fino a ${_s.minCancelHours} ore prima',
+            onTap: () => _editSection('Prenotazioni', [
+              Row(children: [_number('step', 'Intervallo tra gli orari', 'min', 5, 120)]),
+              const SizedBox(height: 12),
+              Row(children: [_number('days', 'Prenotabile fino a', 'giorni', 1, 365)]),
+              const SizedBox(height: 12),
+              Row(children: [_number('cancel', 'Annullabile fino a', 'ore prima', 0, 72)]),
+            ]),
+          ),
+          tile(
+            Icons.chat_outlined,
+            'Promemoria WhatsApp',
+            '24 ore e 1 ora prima di ogni appuntamento',
+            trailing: Switch(
+              value: _s.remindersEnabled,
+              onChanged: _saving
+                  ? null
+                  : (v) {
+                      setState(() => _s.remindersEnabled = v);
+                      _save();
+                    },
+            ),
+          ),
+          SectionTitle(
+            'Amministratori',
+            trailing: TextButton.icon(
+              onPressed: _addAdmin,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Aggiungi'),
+            ),
+          ),
+          for (final e in _admins)
+            GlassCard(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.admin_panel_settings_outlined, color: AppColors.muted),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(e, overflow: TextOverflow.ellipsis)),
+                  if (e != myEmail)
+                    IconButton(onPressed: () => _removeAdmin(e), icon: const Icon(Icons.close))
+                  else
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text('tu', style: TextStyle(color: AppColors.muted)),
+                    ),
+                ],
+              ),
+            ),
+          if (state.backend.isDemo) ...[
+            const SizedBox(height: 16),
+            const Text(
+              'Modalità demo: i dati sono locali e si azzerano alla chiusura dell\'app.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.warning, fontSize: 12.5),
+            ),
+          ],
         ],
       ),
     );

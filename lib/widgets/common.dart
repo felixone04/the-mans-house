@@ -14,14 +14,11 @@ import '../theme.dart';
 String capitalize(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 
 final _price = NumberFormat.currency(locale: 'it_IT', symbol: '€', decimalDigits: 2);
-String fmtPrice(double v) => v == v.roundToDouble()
-    ? '€ ${v.toStringAsFixed(0)}'
-    : _price.format(v);
+String fmtPrice(double v) => v == v.roundToDouble() ? '€ ${v.toStringAsFixed(0)}' : _price.format(v);
 String fmtTime(DateTime d) => DateFormat.Hm('it_IT').format(d);
 String fmtDayLong(DateTime d) => capitalize(DateFormat('EEEE d MMMM', 'it_IT').format(d));
 String fmtDayShort(DateTime d) => capitalize(DateFormat('EEE d MMM', 'it_IT').format(d));
-String fmtDuration(int min) =>
-    min < 60 ? '$min min' : '${min ~/ 60} h${min % 60 == 0 ? '' : ' ${min % 60} min'}';
+String fmtDuration(int min) => min < 60 ? '$min min' : '${min ~/ 60} h${min % 60 == 0 ? '' : ' ${min % 60} min'}';
 
 const weekdayNames = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica'];
 
@@ -34,8 +31,7 @@ Future<void> openUrl(BuildContext context, String url) async {
   if (!ok && context.mounted) showMessage(context, 'Impossibile aprire il link');
 }
 
-Future<void> callPhone(BuildContext context, String phone) =>
-    openUrl(context, 'tel:${normalizePhone(phone)}');
+Future<void> callPhone(BuildContext context, String phone) => openUrl(context, 'tel:${normalizePhone(phone)}');
 
 Future<void> openWhatsApp(BuildContext context, String phone, [String text = '']) {
   final number = normalizePhone(phone).replaceAll('+', '');
@@ -45,14 +41,21 @@ Future<void> openWhatsApp(BuildContext context, String phone, [String text = '']
 void showMessage(BuildContext context, String text, {bool error = false}) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(
-      content: Row(children: [
-        Icon(error ? Icons.error_outline : Icons.check_circle_outline,
-            color: error ? AppColors.danger : AppColors.success, size: 20),
-        const SizedBox(width: 12),
-        Expanded(child: Text(text)),
-      ]),
-    ));
+    ..showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              error ? Icons.error_outline : Icons.check_circle_outline,
+              color: error ? AppColors.danger : AppColors.success,
+              size: 20,
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(text)),
+          ],
+        ),
+      ),
+    );
 }
 
 void showError(BuildContext context, Object e) =>
@@ -96,27 +99,30 @@ class AppBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
-        child: Stack(fit: StackFit.expand, children: [
-          // vignettatura + grana leggera, come una parete di bottega
-          const IgnorePointer(
-            child: RepaintBoundary(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    center: Alignment(0, -0.35),
-                    radius: 1.15,
-                    colors: [Color(0x0FFFFFFF), Color(0x00000000), Color(0x66000000)],
-                    stops: [0, 0.55, 1],
-                  ),
+    decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        // vignettatura + grana leggera, come una parete di bottega
+        const IgnorePointer(
+          child: RepaintBoundary(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment(0, -0.35),
+                  radius: 1.15,
+                  colors: [Color(0x0FFFFFFF), Color(0x00000000), Color(0x66000000)],
+                  stops: [0, 0.55, 1],
                 ),
-                child: CustomPaint(painter: _GrainPainter.instance),
               ),
+              child: CustomPaint(painter: _GrainPainter.instance),
             ),
           ),
-          child,
-        ]),
-      );
+        ),
+        child,
+      ],
+    ),
+  );
 }
 
 class _GrainPainter extends CustomPainter {
@@ -150,26 +156,33 @@ class Ornament extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget line(bool left) => Expanded(
-          child: Container(
-            height: 1,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [
-                AppColors.white.withValues(alpha: left ? 0 : 0.45),
-                AppColors.white.withValues(alpha: left ? 0.45 : 0),
-              ]),
-            ),
+      child: Container(
+        height: 1,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppColors.white.withValues(alpha: left ? 0 : 0.45),
+              AppColors.white.withValues(alpha: left ? 0.45 : 0),
+            ],
           ),
-        );
+        ),
+      ),
+    );
     return SizedBox(
       width: width,
-      child: Row(children: [
-        line(true),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: Transform.rotate(angle: -pi / 2, child: Icon(icon, size: 14, color: AppColors.silver)),
-        ),
-        line(false),
-      ]),
+      child: Row(
+        children: [
+          line(true),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Transform.rotate(
+              angle: -pi / 2,
+              child: Icon(icon, size: 14, color: AppColors.silver),
+            ),
+          ),
+          line(false),
+        ],
+      ),
     );
   }
 }
@@ -182,17 +195,27 @@ class ShopHeading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 4, bottom: 18),
-        child: Column(children: [
-          Text(title.toUpperCase(), textAlign: TextAlign.center, style: slab(size: 20, weight: FontWeight.w600, spacing: 3)),
+    padding: const EdgeInsets.only(top: 4, bottom: 18),
+    child: Column(
+      children: [
+        Text(
+          title.toUpperCase(),
+          textAlign: TextAlign.center,
+          style: slab(size: 20, weight: FontWeight.w600, spacing: 3),
+        ),
+        const SizedBox(height: 8),
+        const Ornament(width: 150),
+        if (subtitle != null) ...[
           const SizedBox(height: 8),
-          const Ornament(width: 150),
-          if (subtitle != null) ...[
-            const SizedBox(height: 8),
-            Text(subtitle!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.muted, fontSize: 13)),
-          ],
-        ]),
-      );
+          Text(
+            subtitle!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.muted, fontSize: 13),
+          ),
+        ],
+      ],
+    ),
+  );
 }
 
 /// Palo da barbiere animato (strisce diagonali monocromatiche).
@@ -223,18 +246,18 @@ class _BarberPoleState extends State<BarberPole> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) => Container(
-        width: widget.width,
-        height: widget.height,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(widget.height),
-          border: Border.all(color: AppColors.white.withValues(alpha: 0.5), width: 0.8),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: AnimatedBuilder(
-          animation: _c,
-          builder: (_, _) => CustomPaint(painter: _PolePainter(_c.value)),
-        ),
-      );
+    width: widget.width,
+    height: widget.height,
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(widget.height),
+      border: Border.all(color: AppColors.white.withValues(alpha: 0.5), width: 0.8),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: AnimatedBuilder(
+      animation: _c,
+      builder: (_, _) => CustomPaint(painter: _PolePainter(_c.value)),
+    ),
+  );
 }
 
 class _PolePainter extends CustomPainter {
@@ -270,9 +293,9 @@ class DottedLeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-        height: 12,
-        child: CustomPaint(painter: _DotsPainter(), size: const Size(double.infinity, 12)),
-      );
+    height: 12,
+    child: CustomPaint(painter: _DotsPainter(), size: const Size(double.infinity, 12)),
+  );
 }
 
 class _DotsPainter extends CustomPainter {
@@ -309,12 +332,12 @@ class ServiceIcon extends StatelessWidget {
       final data = n.contains('bambin')
           ? Icons.child_care_outlined
           : n.contains('shampoo') || n.contains('lavaggio')
-              ? Icons.water_drop_outlined
-              : n.contains('rasatura') || n.contains('panno')
-                  ? Icons.spa_outlined
-                  : n.contains('colore') || n.contains('tinta')
-                      ? Icons.palette_outlined
-                      : Icons.content_cut;
+          ? Icons.water_drop_outlined
+          : n.contains('rasatura') || n.contains('panno')
+          ? Icons.spa_outlined
+          : n.contains('colore') || n.contains('tinta')
+          ? Icons.palette_outlined
+          : Icons.content_cut;
       icon = Icon(data, size: size * 0.46, color: fg);
     }
     return Container(
@@ -341,12 +364,62 @@ class ResponsiveCenter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxWidth),
-          child: Padding(padding: padding ?? const EdgeInsets.symmetric(horizontal: 20), child: child),
-        ),
-      );
+    alignment: Alignment.topCenter,
+    child: ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: Padding(padding: padding ?? const EdgeInsets.symmetric(horizontal: 20), child: child),
+    ),
+  );
+}
+
+/// Pagina senza scorrimento: il contenuto sta sempre nello schermo e sui
+/// telefoni piu' piccoli si riduce leggermente invece di scorrere.
+/// Solo con la tastiera aperta diventa scorrevole, per raggiungere i campi.
+/// Il [child] deve essere una Column con mainAxisSize.min (niente Expanded).
+class FitBody extends StatefulWidget {
+  const FitBody({super.key, required this.child, this.maxWidth = 560, this.alignment = Alignment.center});
+
+  final Widget child;
+  final double maxWidth;
+  final Alignment alignment;
+
+  @override
+  State<FitBody> createState() => _FitBodyState();
+}
+
+class _FitBodyState extends State<FitBody> {
+  // Conserva lo stato dei campi (testo, focus) quando si passa dalla vista
+  // adattata a quella scorrevole: senza, all'apertura della tastiera il campo
+  // veniva ricreato, perdeva il focus e la tastiera si richiudeva.
+  final _contentKey = GlobalKey();
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        // Lo Scaffold toglie la tastiera dal MediaQuery del body (si limita a
+        // rimpicciolirlo): per sapere se e' aperta si legge la finestra.
+        final keyboard = MediaQuery.viewInsetsOf(context).bottom > 0 || View.of(context).viewInsets.bottom > 0;
+        final content = KeyedSubtree(
+          key: _contentKey,
+          child: ResponsiveCenter(maxWidth: widget.maxWidth, child: widget.child),
+        );
+        if (keyboard) {
+          return SingleChildScrollView(child: content);
+        }
+        // Align: rispetta l'allineamento anche dentro uno Stack (AnimatedSwitcher
+        // della prenotazione), che altrimenti centrava la pagina in verticale
+        return Align(
+          alignment: widget.alignment,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: widget.alignment,
+            child: SizedBox(width: c.maxWidth, child: content),
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// Scaffold con sfondo sfumato e AppBar trasparente.
@@ -370,16 +443,16 @@ class AppScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AppBackground(
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          appBar: title == null && actions == null
-              ? null
-              : AppBar(title: title == null ? null : Text(title!.toUpperCase()), actions: actions, leading: leading),
-          body: body,
-          bottomNavigationBar: bottom,
-          floatingActionButton: floatingActionButton,
-        ),
-      );
+    child: Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: title == null && actions == null
+          ? null
+          : AppBar(title: title == null ? null : Text(title!.toUpperCase()), actions: actions, leading: leading),
+      body: body,
+      bottomNavigationBar: bottom,
+      floatingActionButton: floatingActionButton,
+    ),
+  );
 }
 
 class GlassCard extends StatelessWidget {
@@ -407,13 +480,13 @@ class GlassCard extends StatelessWidget {
         color: selected ? Colors.white.withValues(alpha: 0.12) : AppColors.card,
         shape: RoundedRectangleBorder(
           borderRadius: radius,
-          side: BorderSide(
-            color: selected ? AppColors.white : AppColors.cardBorder,
-            width: selected ? 1.4 : 1,
-          ),
+          side: BorderSide(color: selected ? AppColors.white : AppColors.cardBorder, width: selected ? 1.4 : 1),
         ),
         clipBehavior: Clip.antiAlias,
-        child: InkWell(onTap: onTap, child: Padding(padding: padding, child: child)),
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(padding: padding, child: child),
+        ),
       ),
     );
   }
@@ -428,18 +501,24 @@ class PrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-        width: double.infinity,
-        child: FilledButton(
-          onPressed: loading ? null : onPressed,
-          child: loading
-              ? const SizedBox(
-                  width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4, color: AppColors.black))
-              : Row(mainAxisSize: MainAxisSize.min, children: [
-                  if (icon != null) ...[Icon(icon, size: 20), const SizedBox(width: 10)],
-                  Text(label.toUpperCase()),
-                ]),
-        ),
-      );
+    width: double.infinity,
+    child: FilledButton(
+      onPressed: loading ? null : onPressed,
+      child: loading
+          ? const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2.4, color: AppColors.black),
+            )
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[Icon(icon, size: 20), const SizedBox(width: 10)],
+                Text(label.toUpperCase()),
+              ],
+            ),
+    ),
+  );
 }
 
 class SectionTitle extends StatelessWidget {
@@ -449,16 +528,24 @@ class SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 20, bottom: 10),
-        child: Row(children: [
-          Expanded(
-            child: Text(text.toUpperCase(),
-                style: const TextStyle(
-                    color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1.6)),
+    padding: const EdgeInsets.only(top: 20, bottom: 10),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            text.toUpperCase(),
+            style: const TextStyle(
+              color: AppColors.muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.6,
+            ),
           ),
-          ?trailing,
-        ]),
-      );
+        ),
+        ?trailing,
+      ],
+    ),
+  );
 }
 
 class AppLogo extends StatelessWidget {
@@ -468,13 +555,13 @@ class AppLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Image.asset(
-        markOnly ? 'assets/images/logo_mark.png' : 'assets/images/logo_full.png',
-        height: height,
-        fit: BoxFit.contain,
-        filterQuality: FilterQuality.high,
-        color: AppColors.white, // logo in avorio, coerente con i testi
-        colorBlendMode: BlendMode.srcIn,
-      );
+    markOnly ? 'assets/images/logo_mark.png' : 'assets/images/logo_full.png',
+    height: height,
+    fit: BoxFit.contain,
+    filterQuality: FilterQuality.high,
+    color: AppColors.white, // logo in avorio, coerente con i testi
+    colorBlendMode: BlendMode.srcIn,
+  );
 }
 
 class BarberAvatar extends StatelessWidget {
@@ -484,21 +571,24 @@ class BarberAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: const LinearGradient(colors: [AppColors.steel, AppColors.graphite]),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-          image: barber.photoUrl == null || barber.photoUrl!.isEmpty
-              ? null
-              : DecorationImage(image: NetworkImage(barber.photoUrl!), fit: BoxFit.cover),
-        ),
-        alignment: Alignment.center,
-        child: barber.photoUrl == null || barber.photoUrl!.isEmpty
-            ? Text(barber.initials, style: slab(size: size * 0.36, weight: FontWeight.w600))
-            : null,
-      );
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      gradient: const LinearGradient(colors: [AppColors.steel, AppColors.graphite]),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      image: barber.photoUrl == null || barber.photoUrl!.isEmpty
+          ? null
+          : DecorationImage(image: NetworkImage(barber.photoUrl!), fit: BoxFit.cover),
+    ),
+    alignment: Alignment.center,
+    child: barber.photoUrl == null || barber.photoUrl!.isEmpty
+        ? Text(
+            barber.initials,
+            style: slab(size: size * 0.36, weight: FontWeight.w600),
+          )
+        : null,
+  );
 }
 
 class StatusBadge extends StatelessWidget {
@@ -515,12 +605,11 @@ class StatusBadge extends StatelessWidget {
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(20),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(20)),
+      child: Text(
+        statusLabel(status),
+        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.4),
       ),
-      child: Text(statusLabel(status),
-          style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
     );
   }
 }
@@ -532,26 +621,34 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 32),
-        child: Column(children: [
-          Icon(icon, size: 40, color: AppColors.muted),
-          const SizedBox(height: 12),
-          Text(text, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.muted)),
-        ]),
-      );
+    padding: const EdgeInsets.symmetric(vertical: 32),
+    child: Column(
+      children: [
+        Icon(icon, size: 40, color: AppColors.muted),
+        const SizedBox(height: 12),
+        Text(
+          text,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: AppColors.muted),
+        ),
+      ],
+    ),
+  );
 }
 
 /// Transizione morbida tra le pagine.
 Route<T> fadeRoute<T>(Widget page) => PageRouteBuilder<T>(
-      transitionDuration: const Duration(milliseconds: 380),
-      reverseTransitionDuration: const Duration(milliseconds: 280),
-      pageBuilder: (_, _, _) => page,
-      transitionsBuilder: (_, anim, _, child) => FadeTransition(
-        opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
-        child: SlideTransition(
-          position: Tween(begin: const Offset(0, 0.03), end: Offset.zero)
-              .animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
-          child: child,
-        ),
-      ),
-    );
+  transitionDuration: const Duration(milliseconds: 380),
+  reverseTransitionDuration: const Duration(milliseconds: 280),
+  pageBuilder: (_, _, _) => page,
+  transitionsBuilder: (_, anim, _, child) => FadeTransition(
+    opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
+    child: SlideTransition(
+      position: Tween(
+        begin: const Offset(0, 0.03),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+      child: child,
+    ),
+  ),
+);

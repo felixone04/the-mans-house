@@ -79,8 +79,10 @@ class _AuthScreenState extends State<AuthScreen> {
             context: context,
             builder: (c) => AlertDialog(
               title: const Text('Conferma la tua email'),
-              content: Text('Ti abbiamo inviato un link a ${_email.text.trim()}. '
-                  'Aprilo per attivare l\'account, poi accedi.'),
+              content: Text(
+                'Ti abbiamo inviato un link a ${_email.text.trim()}. '
+                'Aprilo per attivare l\'account, poi accedi.',
+              ),
               actions: [FilledButton(onPressed: () => Navigator.pop(c), child: const Text('Ok'))],
             ),
           );
@@ -124,16 +126,18 @@ class _AuthScreenState extends State<AuthScreen> {
     return AppScaffold(
       title: _register ? 'Crea account' : 'Accedi',
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.only(bottom: 32),
-          child: ResponsiveCenter(
-            maxWidth: 460,
-            child: Form(
-              key: _form,
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                const SizedBox(height: 8),
-                const Center(child: AppLogo(height: 90, markOnly: true)),
-                const SizedBox(height: 24),
+        child: FitBody(
+          maxWidth: 460,
+          child: Form(
+            key: _form,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!_register) ...[
+                  const Center(child: AppLogo(height: 72, markOnly: true)),
+                  const SizedBox(height: 18),
+                ],
                 SegmentedButton<bool>(
                   segments: const [
                     ButtonSegment(value: false, label: Text('Accedi')),
@@ -145,42 +149,43 @@ class _AuthScreenState extends State<AuthScreen> {
                   style: SegmentedButton.styleFrom(
                     selectedBackgroundColor: AppColors.white,
                     selectedForegroundColor: AppColors.black,
-                    minimumSize: const Size(0, 46),
+                    minimumSize: const Size(0, 44),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 18),
                 if (_register) ...[
                   TextFormField(
                     controller: _name,
                     textCapitalization: TextCapitalization.words,
                     autofillHints: const [AutofillHints.name],
-                    decoration: const InputDecoration(labelText: 'Nome e cognome', prefixIcon: Icon(Icons.person_outline)),
+                    decoration: const InputDecoration(
+                      labelText: 'Nome e cognome',
+                      prefixIcon: Icon(Icons.person_outline),
+                    ),
                     validator: (v) => (v ?? '').trim().length < 2 ? 'Inserisci il tuo nome' : null,
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   TextFormField(
                     controller: _phone,
                     keyboardType: TextInputType.phone,
                     autofillHints: const [AutofillHints.telephoneNumber],
                     decoration: const InputDecoration(
-                      labelText: 'Cellulare WhatsApp',
-                      helperText: 'Per i promemoria degli appuntamenti',
+                      labelText: 'Cellulare WhatsApp (per i promemoria)',
                       prefixIcon: Icon(Icons.phone_iphone),
                     ),
                     validator: (v) => isValidPhone(v ?? '') ? null : 'Numero non valido',
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                 ],
                 TextFormField(
                   controller: _email,
                   keyboardType: TextInputType.emailAddress,
                   autofillHints: const [AutofillHints.email],
                   decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.mail_outline)),
-                  validator: (v) => RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch((v ?? '').trim())
-                      ? null
-                      : 'Email non valida',
+                  validator: (v) =>
+                      RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch((v ?? '').trim()) ? null : 'Email non valida',
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 TextFormField(
                   controller: _password,
                   obscureText: _obscure,
@@ -196,62 +201,75 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                   validator: (v) => (v ?? '').length < 6 ? 'Minimo 6 caratteri' : null,
                 ),
-                if (!_register)
+                if (_register)
+                  InkWell(
+                    onTap: () => setState(() => _privacy = !_privacy),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        children: [
+                          Checkbox(
+                            value: _privacy,
+                            onChanged: (v) => setState(() => _privacy = v ?? false),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          const Expanded(
+                            child: Text(
+                              'Accetto l\'informativa privacy e i promemoria degli appuntamenti su WhatsApp',
+                              style: TextStyle(fontSize: 12.5, color: AppColors.silver),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(onPressed: _loading ? null : _forgot, child: const Text('Password dimenticata?')),
                   ),
-                if (_register) ...[
-                  const SizedBox(height: 8),
-                  CheckboxListTile(
-                    value: _privacy,
-                    onChanged: (v) => setState(() => _privacy = v ?? false),
-                    contentPadding: EdgeInsets.zero,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: const Text(
-                      'Accetto l\'informativa privacy e di ricevere i promemoria degli appuntamenti su WhatsApp',
-                      style: TextStyle(fontSize: 13, color: AppColors.silver),
+                const SizedBox(height: 8),
+                PrimaryButton(label: _register ? 'Crea account' : 'Accedi', loading: _loading, onPressed: _submit),
+                const SizedBox(height: 18),
+                const Row(
+                  children: [
+                    Expanded(child: Divider()),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      child: Text('oppure', style: TextStyle(color: AppColors.muted)),
                     ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                PrimaryButton(
-                  label: _register ? 'Crea account' : 'Accedi',
-                  loading: _loading,
-                  onPressed: _submit,
+                    Expanded(child: Divider()),
+                  ],
                 ),
-                const SizedBox(height: 24),
-                const Row(children: [
-                  Expanded(child: Divider()),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Text('oppure', style: TextStyle(color: AppColors.muted)),
-                  ),
-                  Expanded(child: Divider()),
-                ]),
-                const SizedBox(height: 20),
-                _SocialButton(
-                  label: 'Continua con Google',
-                  icon: const _GoogleMark(),
-                  onPressed: _loading ? null : () => _run(() => state.backend.signInWithGoogle()),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _SocialButton(
+                        label: 'Google',
+                        icon: const _GoogleMark(),
+                        onPressed: _loading ? null : () => _run(() => state.backend.signInWithGoogle()),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _SocialButton(
+                        label: 'Apple',
+                        icon: const Icon(Icons.apple, size: 24),
+                        onPressed: _loading ? null : () => _run(() => state.backend.signInWithApple()),
+                      ),
+                    ),
+                  ],
                 ),
-                ...[
-                  const SizedBox(height: 12),
-                  _SocialButton(
-                    label: 'Continua con Apple',
-                    icon: const Icon(Icons.apple, size: 24),
-                    onPressed: _loading ? null : () => _run(() => state.backend.signInWithApple()),
-                  ),
-                ],
                 if (state.backend.isDemo) ...[
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 14),
                   const Text(
-                    'Modalità demo · amministratore: admin@demo.it / admin123',
+                    'Demo · amministratore: admin@demo.it / admin123',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.warning, fontSize: 12),
+                    style: TextStyle(color: AppColors.warning, fontSize: 11.5),
                   ),
                 ],
-              ]),
+              ],
             ),
           ),
         ),
@@ -268,14 +286,17 @@ class _SocialButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => OutlinedButton(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          SizedBox(width: 24, height: 24, child: Center(child: icon)),
-          const SizedBox(width: 12),
-          Text(label),
-        ]),
-      );
+    onPressed: onPressed,
+    style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        SizedBox(width: 24, height: 24, child: Center(child: icon)),
+        const SizedBox(width: 12),
+        Text(label),
+      ],
+    ),
+  );
 }
 
 class _GoogleMark extends StatelessWidget {
@@ -283,11 +304,13 @@ class _GoogleMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: 22,
-        height: 22,
-        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-        alignment: Alignment.center,
-        child: const Text('G',
-            style: TextStyle(color: Color(0xFF4285F4), fontWeight: FontWeight.w900, fontSize: 14, height: 1.1)),
-      );
+    width: 22,
+    height: 22,
+    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+    alignment: Alignment.center,
+    child: const Text(
+      'G',
+      style: TextStyle(color: Color(0xFF4285F4), fontWeight: FontWeight.w900, fontSize: 14, height: 1.1),
+    ),
+  );
 }

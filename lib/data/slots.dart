@@ -29,8 +29,26 @@ List<DateTime> availableSlots({
   return result;
 }
 
-/// Orari liberi per "qualsiasi barbiere": a ogni orario associa il barbiere
-/// meno impegnato quel giorno.
+/// Minuti di lavoro (solo appuntamenti: ferie e permessi non contano) di un
+/// barbiere in un intervallo.
+int busyMinutes(String barberId, List<BusyInterval> busy, DateTime from, DateTime to) {
+  var total = 0;
+  for (final b in busy) {
+    if (b.timeOff || b.barberId != barberId || !b.start.isBefore(to) || !b.end.isAfter(from)) continue;
+    final s = b.start.isBefore(from) ? from : b.start;
+    final e = b.end.isAfter(to) ? to : b.end;
+    total += e.difference(s).inMinutes;
+  }
+  return total;
+}
+
+/// Penalita' (in minuti) per chi ha lavorato nella mezz'ora precedente:
+/// a parita' di carico si preferisce chi e' appena stato libero.
+const previousHalfHourPenalty = 30;
+
+/// Orari liberi per "qualsiasi barbiere": per ogni orario sceglie, tra i
+/// barbieri liberi, chi ha meno lavoro quel giorno, penalizzando chi era
+/// impegnato nella mezz'ora prima. A parita' vale l'ordine dei barbieri.
 Map<DateTime, Barber> availableSlotsAnyBarber({
   required List<Barber> barbers,
   required int durationMin,
@@ -40,28 +58,35 @@ Map<DateTime, Barber> availableSlotsAnyBarber({
   DateTime? now, // per i test: altrimenti l'ora corrente
 }) {
   final d = dayOnly(day);
-  final load = <String, int>{
-    for (final b in barbers)
-      b.id: busy.where((x) => x.barberId == b.id && dayOnly(x.start) == d).length,
-  };
-  final ordered = [...barbers]..sort((a, b) => load[a.id]!.compareTo(load[b.id]!));
-  final map = <DateTime, Barber>{};
-  for (final b in ordered) {
+  final nextDay = DateTime(d.year, d.month, d.day + 1);
+  final dayLoad = {for (final b in barbers) b.id: busyMinutes(b.id, busy, d, nextDay)};
+
+  final candidates = <DateTime, List<Barber>>{};
+  for (final b in barbers) {
     for (final s in availableSlots(
-        barber: b, durationMin: durationMin, day: d, busy: busy, stepMin: stepMin, now: now)) {
-      map.putIfAbsent(s, () => b);
+      barber: b,
+      durationMin: durationMin,
+      day: d,
+      busy: busy,
+      stepMin: stepMin,
+      now: now,
+    )) {
+      candidates.putIfAbsent(s, () => []).add(b);
     }
   }
-  final keys = map.keys.toList()..sort();
-  return {for (final k in keys) k: map[k]!};
+
+  int score(Barber b, DateTime slot) {
+    final before = busyMinutes(b.id, busy, slot.subtract(const Duration(minutes: 30)), slot);
+    return dayLoad[b.id]! + (before > 0 ? previousHalfHourPenalty : 0);
+  }
+
+  final keys = candidates.keys.toList()..sort();
+  return {for (final k in keys) k: candidates[k]!.reduce((best, b) => score(b, k) < score(best, k) ? b : best)};
 }
 
 /// Orari del negozio in un giorno (unione delle fasce di tutti i barbieri).
 List<List<int>> shopHoursFor(List<Barber> barbers, int weekday) {
-  final ranges = barbers
-      .expand((b) => b.hoursFor(weekday))
-      .map((h) => [h.start, h.end])
-      .toList()
+  final ranges = barbers.expand((b) => b.hoursFor(weekday)).map((h) => [h.start, h.end]).toList()
     ..sort((a, b) => a[0].compareTo(b[0]));
   final merged = <List<int>>[];
   for (final r in ranges) {
@@ -73,4 +98,3 @@ List<List<int>> shopHoursFor(List<Barber> barbers, int weekday) {
   }
   return merged;
 }
-

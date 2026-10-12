@@ -16,8 +16,6 @@ class AccountScreen extends StatefulWidget {
 }
 
 class _AccountScreenState extends State<AccountScreen> {
-  bool _showPast = false;
-
   @override
   void initState() {
     super.initState();
@@ -73,110 +71,188 @@ class _AccountScreenState extends State<AccountScreen> {
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
     final p = state.profile;
-    final upcoming = state.myAppointments.where((a) => a.isUpcoming).toList()
-      ..sort((a, b) => a.start.compareTo(b.start));
-    final past = state.myAppointments.where((a) => !a.isUpcoming).toList();
-    final minCancel = state.settings.minCancelHours;
+    final upcoming = _upcoming(state);
+    final past = _past(state);
+    final shown = upcoming.take(2).toList();
+    Widget tile(Appointment a) => _tile(state, a);
 
     return AppScaffold(
       title: 'Il mio account',
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: state.refreshAppointments,
-          child: ListView(
-            padding: const EdgeInsets.only(bottom: 32),
-            children: [
-              ResponsiveCenter(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  const SizedBox(height: 8),
-                  GlassCard(
-                    child: Row(children: [
-                      CircleAvatar(
-                        radius: 28,
-                        backgroundColor: AppColors.white,
-                        child: Text(
-                          (p?.fullName.isNotEmpty ?? false) ? p!.fullName[0].toUpperCase() : '?',
-                          style: slab(size: 22, color: AppColors.black, weight: FontWeight.w700),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(p?.fullName.isNotEmpty == true ? p!.fullName : 'Cliente',
-                              style: slab(size: 18, weight: FontWeight.w600, spacing: 0.4)),
-                          const SizedBox(height: 2),
-                          Text(p?.email ?? '', style: const TextStyle(color: AppColors.silver, fontSize: 13)),
-                          if (p?.phone.isNotEmpty ?? false)
-                            Text(p!.phone, style: const TextStyle(color: AppColors.silver, fontSize: 13)),
-                        ]),
-                      ),
-                      IconButton(
-                        tooltip: 'Modifica profilo',
-                        icon: const Icon(Icons.edit_outlined),
-                        onPressed: () => Navigator.of(context)
-                            .push(fadeRoute(const CompleteProfileScreen(editing: true))),
-                      ),
-                    ]),
-                  ),
-                  if (state.isAdmin) ...[
-                    const SizedBox(height: 12),
+        child: Column(
+          children: [
+            Expanded(
+              child: FitBody(
+                alignment: Alignment.topCenter,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 8),
                     GlassCard(
-                      onTap: () => Navigator.of(context).push(fadeRoute(const AdminScreen())),
-                      child: const Row(children: [
-                        Icon(Icons.dashboard_customize_outlined),
-                        SizedBox(width: 14),
-                        Expanded(
-                          child: Text('Area riservata', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 26,
+                            backgroundColor: AppColors.white,
+                            child: Text(
+                              (p?.fullName.isNotEmpty ?? false) ? p!.fullName[0].toUpperCase() : '?',
+                              style: slab(size: 21, color: AppColors.black, weight: FontWeight.w700),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  p?.fullName.isNotEmpty == true ? p!.fullName : 'Cliente',
+                                  style: slab(size: 18, weight: FontWeight.w600, spacing: 0.4),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(p?.email ?? '', style: const TextStyle(color: AppColors.silver, fontSize: 13)),
+                                if (p?.phone.isNotEmpty ?? false)
+                                  Text(p!.phone, style: const TextStyle(color: AppColors.silver, fontSize: 13)),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Modifica profilo',
+                            icon: const Icon(Icons.edit_outlined),
+                            onPressed: () =>
+                                Navigator.of(context).push(fadeRoute(const CompleteProfileScreen(editing: true))),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (state.isAdmin) ...[
+                      const SizedBox(height: 10),
+                      GlassCard(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                        onTap: () => Navigator.of(context).push(fadeRoute(const AdminScreen())),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.dashboard_customize_outlined),
+                            SizedBox(width: 14),
+                            Expanded(
+                              child: Text(
+                                'Area riservata',
+                                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                              ),
+                            ),
+                            Icon(Icons.chevron_right, color: AppColors.muted),
+                          ],
                         ),
-                        Icon(Icons.chevron_right, color: AppColors.muted),
-                      ]),
-                    ),
-                  ],
-                  SectionTitle('Prossimi appuntamenti'),
-                  if (upcoming.isEmpty)
-                    GlassCard(
-                      child: Column(children: [
-                        const EmptyState(icon: Icons.event_available, text: 'Nessun appuntamento in programma'),
-                        OutlinedButton.icon(
-                          onPressed: () => Navigator.of(context).pushReplacement(fadeRoute(const BookingScreen())),
-                          icon: const Icon(Icons.content_cut, size: 18),
-                          label: const Text('Prenota ora'),
-                        ),
-                        const SizedBox(height: 8),
-                      ]),
-                    ),
-                  for (final a in upcoming)
-                    _AppointmentTile(
-                      appointment: a,
-                      onCancel: a.start.isAfter(DateTime.now().add(Duration(hours: minCancel))) ? () => _cancel(a) : null,
-                      cancelHint: 'Annullabile fino a $minCancel ore prima',
-                    ),
-                  if (past.isNotEmpty) ...[
+                      ),
+                    ],
                     SectionTitle(
-                      'Storico',
-                      trailing: TextButton(
-                        onPressed: () => setState(() => _showPast = !_showPast),
-                        child: Text(_showPast ? 'Nascondi' : 'Mostra (${past.length})'),
+                      'Prossimi appuntamenti',
+                      trailing: upcoming.length > shown.length
+                          ? TextButton(
+                              onPressed: () => _showList(
+                                'Prossimi appuntamenti',
+                                (s) => _upcoming(s).map((a) => _tile(s, a)).toList(),
+                              ),
+                              child: Text('Vedi tutti (${upcoming.length})'),
+                            )
+                          : null,
+                    ),
+                    if (upcoming.isEmpty)
+                      GlassCard(
+                        child: Column(
+                          children: [
+                            const EmptyState(icon: Icons.event_available, text: 'Nessun appuntamento in programma'),
+                            OutlinedButton.icon(
+                              onPressed: () => Navigator.of(context).pushReplacement(fadeRoute(const BookingScreen())),
+                              icon: const Icon(Icons.content_cut, size: 18),
+                              label: const Text('Prenota ora'),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                        ),
+                      ),
+                    for (final a in shown) tile(a),
+                  ],
+                ),
+              ),
+            ),
+            ResponsiveCenter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8, bottom: 12),
+                child: Row(
+                  children: [
+                    if (past.isNotEmpty) ...[
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _showList(
+                            'Storico',
+                            (s) => _past(s).map((a) => _AppointmentTile(appointment: a)).toList(),
+                          ),
+                          icon: const Icon(Icons.history, size: 18),
+                          label: Text('Storico (${past.length})'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                    ],
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _signOut,
+                        icon: const Icon(Icons.logout, size: 18),
+                        label: const Text('Esci'),
                       ),
                     ),
-                    if (_showPast) for (final a in past) _AppointmentTile(appointment: a),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      tooltip: 'Elimina account',
+                      onPressed: _deleteAccount,
+                      icon: const Icon(Icons.person_remove_outlined, color: AppColors.danger),
+                    ),
                   ],
-                  const SizedBox(height: 28),
-                  OutlinedButton.icon(
-                    onPressed: _signOut,
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Esci'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: _deleteAccount,
-                    style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-                    child: const Text('Elimina account'),
-                  ),
-                ]),
+                ),
               ),
-            ],
-          ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Appointment> _upcoming(AppState state) =>
+      state.myAppointments.where((a) => a.isUpcoming).toList()..sort((a, b) => a.start.compareTo(b.start));
+
+  List<Appointment> _past(AppState state) => state.myAppointments.where((a) => !a.isUpcoming).toList();
+
+  Widget _tile(AppState state, Appointment a) {
+    final minCancel = state.settings.minCancelHours;
+    return _AppointmentTile(
+      appointment: a,
+      onCancel: a.start.isAfter(DateTime.now().add(Duration(hours: minCancel))) ? () => _cancel(a) : null,
+      cancelHint: 'Annullabile fino a $minCancel ore prima',
+    );
+  }
+
+  /// Elenco completo in un pannello dal basso (la pagina resta fissa).
+  /// Le righe si ricostruiscono dallo stato: annullando un appuntamento dal
+  /// pannello l'elenco si aggiorna (prima restava "Confermato").
+  void _showList(String title, List<Widget> Function(AppState) tiles) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: 560),
+      builder: (c) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        builder: (c, scroll) => ListView(
+          controller: scroll,
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          children: [
+            Center(
+              child: Text(title.toUpperCase(), style: slab(size: 16, weight: FontWeight.w600, spacing: 2)),
+            ),
+            const SizedBox(height: 16),
+            ...tiles(AppScope.of(c)),
+          ],
         ),
       ),
     );
@@ -195,36 +271,52 @@ class _AppointmentTile extends StatelessWidget {
     final upcoming = a.isUpcoming;
     return GlassCard(
       margin: const EdgeInsets.only(bottom: 10),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(
-            child: Text(fmtDayLong(a.start),
-                style: TextStyle(fontWeight: FontWeight.w700, color: upcoming ? AppColors.white : AppColors.silver)),
-          ),
-          StatusBadge(a.status),
-        ]),
-        const SizedBox(height: 6),
-        Text('${fmtTime(a.start)} – ${fmtTime(a.end)}  ·  ${a.serviceName}',
-            style: const TextStyle(color: AppColors.silver)),
-        if (a.barberName.isNotEmpty)
-          Text('con ${a.barberName}  ·  ${fmtPrice(a.price)}', style: const TextStyle(color: AppColors.muted, fontSize: 13)),
-        if (upcoming) ...[
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(
-              child: Text(onCancel == null ? 'Per annullare contatta il negozio' : (cancelHint ?? ''),
-                  style: const TextStyle(color: AppColors.muted, fontSize: 11.5)),
-            ),
-            if (onCancel != null)
-              TextButton.icon(
-                onPressed: onCancel,
-                style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-                icon: const Icon(Icons.close, size: 18),
-                label: const Text('Annulla'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  fmtDayLong(a.start),
+                  style: TextStyle(fontWeight: FontWeight.w700, color: upcoming ? AppColors.white : AppColors.silver),
+                ),
               ),
-          ]),
+              StatusBadge(a.status),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${fmtTime(a.start)} – ${fmtTime(a.end)}  ·  ${a.serviceName}',
+            style: const TextStyle(color: AppColors.silver),
+          ),
+          if (a.barberName.isNotEmpty)
+            Text(
+              'con ${a.barberName}  ·  ${fmtPrice(a.price)}',
+              style: const TextStyle(color: AppColors.muted, fontSize: 13),
+            ),
+          if (upcoming) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    onCancel == null ? 'Per annullare contatta il negozio' : (cancelHint ?? ''),
+                    style: const TextStyle(color: AppColors.muted, fontSize: 11.5),
+                  ),
+                ),
+                if (onCancel != null)
+                  TextButton.icon(
+                    onPressed: onCancel,
+                    style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+                    icon: const Icon(Icons.close, size: 18),
+                    label: const Text('Annulla'),
+                  ),
+              ],
+            ),
+          ],
         ],
-      ]),
+      ),
     );
   }
 }

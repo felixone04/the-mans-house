@@ -45,14 +45,16 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     if (p == null) return;
     setState(() => _loading = true);
     try {
-      await state.backend.updateProfile(Profile(
-        id: p.id,
-        email: p.email,
-        fullName: _name.text,
-        phone: _phone.text,
-        isAdmin: p.isAdmin,
-        whatsappOptIn: _optIn,
-      ));
+      await state.backend.updateProfile(
+        Profile(
+          id: p.id,
+          email: p.email,
+          fullName: _name.text,
+          phone: _phone.text,
+          isAdmin: p.isAdmin,
+          whatsappOptIn: _optIn,
+        ),
+      );
       await state.refreshProfile();
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
@@ -67,15 +69,21 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     return AppScaffold(
       title: widget.editing ? 'Il mio profilo' : 'Completa il profilo',
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: ResponsiveCenter(
-            maxWidth: 460,
-            child: Form(
-              key: _form,
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        child: FitBody(
+          maxWidth: 460,
+          child: Form(
+            key: _form,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                 const SizedBox(height: 12),
                 if (!widget.editing) ...[
-                  Text('Ancora un passo', style: slab(size: 22, weight: FontWeight.w600), textAlign: TextAlign.center),
+                  Text(
+                    'Ancora un passo',
+                    style: slab(size: 22, weight: FontWeight.w600),
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 8),
                   const Text(
                     'Ci servono il tuo nome e il numero WhatsApp per confermare gli appuntamenti e mandarti i promemoria.',
@@ -87,14 +95,20 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                 TextFormField(
                   controller: _name,
                   textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(labelText: 'Nome e cognome', prefixIcon: Icon(Icons.person_outline)),
+                  decoration: const InputDecoration(
+                    labelText: 'Nome e cognome',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
                   validator: (v) => (v ?? '').trim().length < 2 ? 'Inserisci il tuo nome' : null,
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
                   controller: _phone,
                   keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(labelText: 'Cellulare WhatsApp', prefixIcon: Icon(Icons.phone_iphone)),
+                  decoration: const InputDecoration(
+                    labelText: 'Cellulare WhatsApp',
+                    prefixIcon: Icon(Icons.phone_iphone),
+                  ),
                   validator: (v) => isValidPhone(v ?? '') ? null : 'Numero non valido',
                 ),
                 const SizedBox(height: 8),
@@ -103,13 +117,15 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   onChanged: (v) => setState(() => _optIn = v),
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Promemoria su WhatsApp'),
-                  subtitle: const Text('24 ore e 1 ora prima dell\'appuntamento',
-                      style: TextStyle(color: AppColors.muted, fontSize: 12.5)),
+                  subtitle: const Text(
+                    '24 ore e 1 ora prima dell\'appuntamento',
+                    style: TextStyle(color: AppColors.muted, fontSize: 12.5),
+                  ),
                 ),
                 const SizedBox(height: 20),
                 PrimaryButton(label: 'Salva', loading: _loading, onPressed: _save),
                 const SizedBox(height: 24),
-              ]),
+              ],
             ),
           ),
         ),

@@ -42,34 +42,34 @@ class ShopSettings {
   });
 
   factory ShopSettings.fromJson(Map<String, dynamic> j) => ShopSettings(
-        name: j['name'] ?? '',
-        tagline: j['tagline'] ?? '',
-        about: j['about'] ?? '',
-        address: j['address'] ?? '',
-        mapsUrl: j['maps_url'] ?? '',
-        phone: j['phone'] ?? '',
-        whatsapp: j['whatsapp'] ?? '',
-        instagram: j['instagram'] ?? '',
-        slotStepMin: j['slot_step_min'] ?? 15,
-        bookingDaysAhead: j['booking_days_ahead'] ?? 30,
-        minCancelHours: j['min_cancel_hours'] ?? 2,
-        remindersEnabled: j['reminders_enabled'] ?? true,
-      );
+    name: j['name'] ?? '',
+    tagline: j['tagline'] ?? '',
+    about: j['about'] ?? '',
+    address: j['address'] ?? '',
+    mapsUrl: j['maps_url'] ?? '',
+    phone: j['phone'] ?? '',
+    whatsapp: j['whatsapp'] ?? '',
+    instagram: j['instagram'] ?? '',
+    slotStepMin: j['slot_step_min'] ?? 15,
+    bookingDaysAhead: j['booking_days_ahead'] ?? 30,
+    minCancelHours: j['min_cancel_hours'] ?? 2,
+    remindersEnabled: j['reminders_enabled'] ?? true,
+  );
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'tagline': tagline,
-        'about': about,
-        'address': address,
-        'maps_url': mapsUrl,
-        'phone': phone,
-        'whatsapp': whatsapp,
-        'instagram': instagram,
-        'slot_step_min': slotStepMin,
-        'booking_days_ahead': bookingDaysAhead,
-        'min_cancel_hours': minCancelHours,
-        'reminders_enabled': remindersEnabled,
-      };
+    'name': name,
+    'tagline': tagline,
+    'about': about,
+    'address': address,
+    'maps_url': mapsUrl,
+    'phone': phone,
+    'whatsapp': whatsapp,
+    'instagram': instagram,
+    'slot_step_min': slotStepMin,
+    'booking_days_ahead': bookingDaysAhead,
+    'min_cancel_hours': minCancelHours,
+    'reminders_enabled': remindersEnabled,
+  };
 
   ShopSettings copy() => ShopSettings.fromJson(toJson());
 }
@@ -94,24 +94,24 @@ class Service {
   });
 
   factory Service.fromJson(Map<String, dynamic> j) => Service(
-        id: j['id'],
-        name: j['name'],
-        description: j['description'] ?? '',
-        durationMin: j['duration_min'],
-        price: _num(j['price']),
-        active: j['active'] ?? true,
-        sortOrder: j['sort_order'] ?? 0,
-      );
+    id: j['id'],
+    name: j['name'],
+    description: j['description'] ?? '',
+    durationMin: j['duration_min'],
+    price: _num(j['price']),
+    active: j['active'] ?? true,
+    sortOrder: j['sort_order'] ?? 0,
+  );
 
   Map<String, dynamic> toJson() => {
-        if (id.isNotEmpty) 'id': id,
-        'name': name,
-        'description': description,
-        'duration_min': durationMin,
-        'price': price,
-        'active': active,
-        'sort_order': sortOrder,
-      };
+    if (id.isNotEmpty) 'id': id,
+    'name': name,
+    'description': description,
+    'duration_min': durationMin,
+    'price': price,
+    'active': active,
+    'sort_order': sortOrder,
+  };
 }
 
 class WorkingHours {
@@ -121,18 +121,15 @@ class WorkingHours {
 
   WorkingHours({required this.weekday, required this.start, required this.end});
 
-  factory WorkingHours.fromJson(Map<String, dynamic> j) => WorkingHours(
-        weekday: j['weekday'],
-        start: parseTime(j['start_time']),
-        end: parseTime(j['end_time']),
-      );
+  factory WorkingHours.fromJson(Map<String, dynamic> j) =>
+      WorkingHours(weekday: j['weekday'], start: parseTime(j['start_time']), end: parseTime(j['end_time']));
 
   Map<String, dynamic> toJson(String barberId) => {
-        'barber_id': barberId,
-        'weekday': weekday,
-        'start_time': formatTime(start),
-        'end_time': formatTime(end),
-      };
+    'barber_id': barberId,
+    'weekday': weekday,
+    'start_time': formatTime(start),
+    'end_time': formatTime(end),
+  };
 
   WorkingHours copy() => WorkingHours(weekday: weekday, start: start, end: end);
 }
@@ -157,25 +154,23 @@ class Barber {
   }) : hours = hours ?? [];
 
   factory Barber.fromJson(Map<String, dynamic> j) => Barber(
-        id: j['id'],
-        name: j['name'],
-        title: j['title'] ?? '',
-        photoUrl: j['photo_url'],
-        active: j['active'] ?? true,
-        sortOrder: j['sort_order'] ?? 0,
-        hours: ((j['barber_hours'] as List?) ?? [])
-            .map((h) => WorkingHours.fromJson(h))
-            .toList(),
-      );
+    id: j['id'],
+    name: j['name'],
+    title: j['title'] ?? '',
+    photoUrl: j['photo_url'],
+    active: j['active'] ?? true,
+    sortOrder: j['sort_order'] ?? 0,
+    hours: ((j['barber_hours'] as List?) ?? []).map((h) => WorkingHours.fromJson(h)).toList(),
+  );
 
   Map<String, dynamic> toJson() => {
-        if (id.isNotEmpty) 'id': id,
-        'name': name,
-        'title': title,
-        'photo_url': photoUrl,
-        'active': active,
-        'sort_order': sortOrder,
-      };
+    if (id.isNotEmpty) 'id': id,
+    'name': name,
+    'title': title,
+    'photo_url': photoUrl,
+    'active': active,
+    'sort_order': sortOrder,
+  };
 
   String get initials {
     final parts = name.trim().split(RegExp(r'\s+'));
@@ -185,18 +180,17 @@ class Barber {
   }
 
   List<WorkingHours> hoursFor(int weekday) =>
-      hours.where((h) => h.weekday == weekday).toList()
-        ..sort((a, b) => a.start.compareTo(b.start));
+      hours.where((h) => h.weekday == weekday).toList()..sort((a, b) => a.start.compareTo(b.start));
 
   Barber copy() => Barber(
-        id: id,
-        name: name,
-        title: title,
-        photoUrl: photoUrl,
-        active: active,
-        sortOrder: sortOrder,
-        hours: hours.map((h) => h.copy()).toList(),
-      );
+    id: id,
+    name: name,
+    title: title,
+    photoUrl: photoUrl,
+    active: active,
+    sortOrder: sortOrder,
+    hours: hours.map((h) => h.copy()).toList(),
+  );
 }
 
 class TimeOff {
@@ -206,62 +200,59 @@ class TimeOff {
   DateTime end;
   String reason;
 
-  TimeOff({
-    this.id = '',
-    required this.barberId,
-    required this.start,
-    required this.end,
-    this.reason = '',
-  });
+  TimeOff({this.id = '', required this.barberId, required this.start, required this.end, this.reason = ''});
 
   factory TimeOff.fromJson(Map<String, dynamic> j) => TimeOff(
-        id: j['id'],
-        barberId: j['barber_id'],
-        start: _dt(j['start_at']),
-        end: _dt(j['end_at']),
-        reason: j['reason'] ?? '',
-      );
+    id: j['id'],
+    barberId: j['barber_id'],
+    start: _dt(j['start_at']),
+    end: _dt(j['end_at']),
+    reason: j['reason'] ?? '',
+  );
 
   Map<String, dynamic> toJson() => {
-        'barber_id': barberId,
-        'start_at': start.toUtc().toIso8601String(),
-        'end_at': end.toUtc().toIso8601String(),
-        'reason': reason,
-      };
+    'barber_id': barberId,
+    'start_at': start.toUtc().toIso8601String(),
+    'end_at': end.toUtc().toIso8601String(),
+    'reason': reason,
+  };
 }
 
 class BusyInterval {
   final String barberId;
   final DateTime start;
   final DateTime end;
-  BusyInterval(this.barberId, this.start, this.end);
+
+  /// Ferie/permesso (non e' lavoro: non conta nel carico del "primo disponibile").
+  final bool timeOff;
+  BusyInterval(this.barberId, this.start, this.end, {this.timeOff = false});
 
   factory BusyInterval.fromJson(Map<String, dynamic> j) =>
-      BusyInterval(j['barber_id'], _dt(j['start_at']), _dt(j['end_at']));
+      BusyInterval(j['barber_id'], _dt(j['start_at']), _dt(j['end_at']), timeOff: j['is_time_off'] == true);
 }
 
 enum AppointmentStatus { confirmed, cancelled, completed, noShow }
 
 AppointmentStatus statusFromString(String s) => switch (s) {
-      'cancelled' => AppointmentStatus.cancelled,
-      'completed' => AppointmentStatus.completed,
-      'no_show' => AppointmentStatus.noShow,
-      _ => AppointmentStatus.confirmed,
-    };
+  'cancelled' => AppointmentStatus.cancelled,
+  'completed' => AppointmentStatus.completed,
+  'no_show' => AppointmentStatus.noShow,
+  _ => AppointmentStatus.confirmed,
+};
 
 String statusToString(AppointmentStatus s) => switch (s) {
-      AppointmentStatus.cancelled => 'cancelled',
-      AppointmentStatus.completed => 'completed',
-      AppointmentStatus.noShow => 'no_show',
-      AppointmentStatus.confirmed => 'confirmed',
-    };
+  AppointmentStatus.cancelled => 'cancelled',
+  AppointmentStatus.completed => 'completed',
+  AppointmentStatus.noShow => 'no_show',
+  AppointmentStatus.confirmed => 'confirmed',
+};
 
 String statusLabel(AppointmentStatus s) => switch (s) {
-      AppointmentStatus.cancelled => 'Annullato',
-      AppointmentStatus.completed => 'Completato',
-      AppointmentStatus.noShow => 'Non presentato',
-      AppointmentStatus.confirmed => 'Confermato',
-    };
+  AppointmentStatus.cancelled => 'Annullato',
+  AppointmentStatus.completed => 'Completato',
+  AppointmentStatus.noShow => 'Non presentato',
+  AppointmentStatus.confirmed => 'Confermato',
+};
 
 class Appointment {
   String id;
@@ -297,24 +288,23 @@ class Appointment {
   });
 
   factory Appointment.fromJson(Map<String, dynamic> j) => Appointment(
-        id: j['id'],
-        userId: j['user_id'],
-        barberId: j['barber_id'],
-        barberName: (j['barbers'] as Map?)?['name'] ?? '',
-        serviceId: j['service_id'],
-        serviceName: j['service_name'] ?? '',
-        price: _num(j['price']),
-        start: _dt(j['start_at']),
-        end: _dt(j['end_at']),
-        status: statusFromString(j['status'] ?? 'confirmed'),
-        customerName: j['customer_name'] ?? '',
-        customerPhone: j['customer_phone'] ?? '',
-        notes: j['notes'] ?? '',
-        createdByAdmin: j['created_by_admin'] ?? false,
-      );
+    id: j['id'],
+    userId: j['user_id'],
+    barberId: j['barber_id'],
+    barberName: (j['barbers'] as Map?)?['name'] ?? '',
+    serviceId: j['service_id'],
+    serviceName: j['service_name'] ?? '',
+    price: _num(j['price']),
+    start: _dt(j['start_at']),
+    end: _dt(j['end_at']),
+    status: statusFromString(j['status'] ?? 'confirmed'),
+    customerName: j['customer_name'] ?? '',
+    customerPhone: j['customer_phone'] ?? '',
+    notes: j['notes'] ?? '',
+    createdByAdmin: j['created_by_admin'] ?? false,
+  );
 
-  bool get isUpcoming =>
-      status == AppointmentStatus.confirmed && start.isAfter(DateTime.now());
+  bool get isUpcoming => status == AppointmentStatus.confirmed && start.isAfter(DateTime.now());
 }
 
 class Profile {
@@ -335,13 +325,13 @@ class Profile {
   });
 
   factory Profile.fromJson(Map<String, dynamic> j) => Profile(
-        id: j['id'],
-        email: j['email'] ?? '',
-        fullName: j['full_name'] ?? '',
-        phone: j['phone'] ?? '',
-        isAdmin: j['is_admin'] ?? false,
-        whatsappOptIn: j['whatsapp_opt_in'] ?? true,
-      );
+    id: j['id'],
+    email: j['email'] ?? '',
+    fullName: j['full_name'] ?? '',
+    phone: j['phone'] ?? '',
+    isAdmin: j['is_admin'] ?? false,
+    whatsappOptIn: j['whatsapp_opt_in'] ?? true,
+  );
 
   bool get isComplete => fullName.trim().isNotEmpty && phone.trim().isNotEmpty;
 
@@ -366,13 +356,13 @@ class CustomerSummary {
   });
 
   factory CustomerSummary.fromJson(Map<String, dynamic> j) => CustomerSummary(
-        id: j['id'],
-        email: j['email'] ?? '',
-        fullName: j['full_name'] ?? '',
-        phone: j['phone'] ?? '',
-        bookings: (j['bookings'] as num?)?.toInt() ?? 0,
-        lastVisit: j['last_visit'] == null ? null : _dt(j['last_visit']),
-      );
+    id: j['id'],
+    email: j['email'] ?? '',
+    fullName: j['full_name'] ?? '',
+    phone: j['phone'] ?? '',
+    bookings: (j['bookings'] as num?)?.toInt() ?? 0,
+    lastVisit: j['last_visit'] == null ? null : _dt(j['last_visit']),
+  );
 }
 
 /// Normalizza un numero italiano in formato internazionale (+39...).
@@ -384,5 +374,4 @@ String normalizePhone(String raw) {
   return p;
 }
 
-bool isValidPhone(String raw) =>
-    RegExp(r'^\+\d{8,15}$').hasMatch(normalizePhone(raw));
+bool isValidPhone(String raw) => RegExp(r'^\+\d{8,15}$').hasMatch(normalizePhone(raw));
