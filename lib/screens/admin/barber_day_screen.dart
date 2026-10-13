@@ -336,7 +336,10 @@ class _BarberDayScreenState extends State<BarberDayScreen> with AgendaActions {
                                       Icon(Icons.weekend_outlined, size: 44, color: tone.accent),
                                       const SizedBox(height: 12),
                                       Text(
-                                        b.hoursFor(_day.weekday).isEmpty
+                                        (ShopCalendar.forDay(_day)?.closed ?? false)
+                                            ? 'Negozio chiuso'
+                                                  '${ShopCalendar.forDay(_day)!.note.isEmpty ? '' : ' · ${ShopCalendar.forDay(_day)!.note}'}'
+                                            : b.hoursOn(_day).isEmpty
                                             ? '${b.name} oggi è di riposo'
                                             : 'Nessun appuntamento',
                                         style: const TextStyle(color: AgendaLight.sub, fontSize: 15),

@@ -9,6 +9,7 @@ import 'package:the_mans_house/data/demo_backend.dart';
 import 'package:the_mans_house/data/export.dart';
 import 'package:the_mans_house/data/slots.dart';
 import 'package:the_mans_house/models.dart';
+import 'package:the_mans_house/screens/admin/broadcast_screen.dart';
 import 'package:the_mans_house/screens/admin/customer_screen.dart';
 import 'package:the_mans_house/screens/admin/search_screen.dart';
 import 'package:the_mans_house/screens/admin/walk_in_sheet.dart';
@@ -122,6 +123,24 @@ void main() {
     await tester.tap(find.text('Luca Bianchi'));
     await settle(tester);
     expect(find.byType(CustomerScreen), findsOneWidget);
+  });
+
+  testWidgets('messaggio a tutti: la promozione va solo a chi ha dato il consenso', (tester) async {
+    final (_, backend) = await pump(tester, (_) => const BroadcastScreen());
+    final all = (await tester.runAsync(backend.customers))!;
+    final withPhone = all.where((c) => isValidPhone(c.phone)).map((c) => normalizePhone(c.phone)).toSet().length;
+    expect(find.textContaining('$withPhone destinatari'), findsOneWidget);
+
+    await tester.tap(find.text('Promozione').first);
+    await settle(tester);
+    // dati demo: due clienti dal banco hanno accettato le offerte
+    expect(find.textContaining('2 destinatari'), findsOneWidget);
+    expect(find.textContaining('esclusi senza consenso'), findsOneWidget);
+
+    // senza testo non si invia
+    await tester.tap(find.text('Invia').first);
+    await settle(tester);
+    expect(find.text('Scrivi prima il messaggio'), findsOneWidget);
   });
 
   testWidgets('cliente entrato ora: inserito nel primo orario libero di oggi', (tester) async {

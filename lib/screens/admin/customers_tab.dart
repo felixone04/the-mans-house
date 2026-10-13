@@ -4,6 +4,7 @@ import '../../models.dart';
 import '../../state/app_state.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
+import 'broadcast_screen.dart';
 import 'customer_screen.dart';
 
 class CustomersTab extends StatefulWidget {
@@ -59,9 +60,18 @@ class _CustomersTabState extends State<CustomersTab> {
                 onChanged: (v) => setState(() => _query = v),
                 decoration: const InputDecoration(hintText: 'Cerca per nome, email o telefono', prefixIcon: Icon(Icons.search)),
               ),
-              const SizedBox(height: 8),
-              Text('${list.length} clienti', style: const TextStyle(color: AppColors.muted, fontSize: 12.5)),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
+              Row(children: [
+                Expanded(
+                  child: Text('${list.length} clienti', style: const TextStyle(color: AppColors.muted, fontSize: 12.5)),
+                ),
+                TextButton.icon(
+                  onPressed: () => Navigator.of(context).push(fadeRoute(const BroadcastScreen())),
+                  icon: const Icon(Icons.campaign_outlined, size: 18),
+                  label: const Text('Messaggio a tutti'),
+                ),
+              ]),
+              const SizedBox(height: 4),
               if (_loading)
                 const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator()))
               else if (list.isEmpty)

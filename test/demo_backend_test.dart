@@ -59,7 +59,18 @@ void main() {
     await backend.signInWithGoogle();
     final p = await backend.fetchProfile();
     expect(p!.isComplete, isFalse);
+    // senza informativa accettata il profilo resta da completare
     await backend.updateProfile(Profile(id: p.id, email: p.email, fullName: 'Cliente Google', phone: '3339998877'));
+    expect((await backend.fetchProfile())!.isComplete, isFalse);
+    await backend.updateProfile(
+      Profile(
+        id: p.id,
+        email: p.email,
+        fullName: 'Cliente Google',
+        phone: '3339998877',
+        privacyAcceptedAt: DateTime.now(),
+      ),
+    );
     expect((await backend.fetchProfile())!.isComplete, isTrue);
   });
 
@@ -322,7 +333,10 @@ void main() {
     final arrived = DateTime.now();
     await backend.updateVisit(a.id, arrivedAt: arrived, payment: PaymentStatus.deposit, amountPaid: 5);
     final day = dayOnly(start);
-    var saved = (await backend.appointmentsBetween(day, day.add(const Duration(days: 1)))).firstWhere((x) => x.id == a.id);
+    var saved = (await backend.appointmentsBetween(
+      day,
+      day.add(const Duration(days: 1)),
+    )).firstWhere((x) => x.id == a.id);
     expect(saved.arrivedAt, arrived);
     expect(saved.collected, 5);
     expect(saved.outstanding, service.price - 5);
@@ -330,6 +344,61 @@ void main() {
     await backend.updateVisit(a.id, arrivedAt: arrived, payment: PaymentStatus.paid, amountPaid: service.price);
     saved = (await backend.appointmentsBetween(day, day.add(const Duration(days: 1)))).firstWhere((x) => x.id == a.id);
     expect(saved.outstanding, 0);
+  });
+
+  test('chiusura del negozio: niente prenotazioni quel giorno, orario speciale solo in fascia', () async {
+    await backend.signInWithEmail(DemoBackend.adminEmail, DemoBackend.adminPassword);
+    final barber = (await backend.fetchBarbers()).first;
+    final service = (await backend.fetchServices()).first;
+    final slot = await freeSlot(barber, service, DateTime.now().add(const Duration(days: 1)));
+    final day = dayOnly(slot);
+
+    await backend.saveShopDays([ShopDay(day: day, note: 'Ferie')]);
+    await expectLater(
+      () => backend.book(barberId: barber.id, serviceId: service.id, start: slot, customerName: 'X'),
+      throwsA(isA<AppException>()),
+    );
+    expect((await backend.fetchShopDays()).single.note, 'Ferie');
+
+    // orario speciale 7-8 (prima dell'apertura abituale, quindi libero) solo per
+    // questo barbiere: dentro si', fuori no
+    await backend.saveShopDays([
+      ShopDay(day: day, open: 420, close: 480, barberIds: [barber.id]),
+    ]);
+    final inside = DateTime(day.year, day.month, day.day, 7);
+    final outside = DateTime(day.year, day.month, day.day, 15, 30);
+    final ok = await backend.book(barberId: barber.id, serviceId: service.id, start: inside, customerName: 'Y');
+    expect(ok.start, inside);
+    await expectLater(
+      () => backend.book(barberId: barber.id, serviceId: service.id, start: outside, customerName: 'Z'),
+      throwsA(isA<AppException>()),
+    );
+
+    await backend.deleteShopDay(day);
+    expect(await backend.fetchShopDays(), isEmpty);
+    ShopCalendar.set(const []);
+  });
+
+  test('consensi: registrazione con offerte, cliente dal banco segnato in negozio', () async {
+    await backend.signUpWithEmail(
+      email: 'offerte@test.it',
+      password: 'segreta1',
+      fullName: 'Paolo Offerte',
+      phone: '3331112222',
+      marketingOptIn: true,
+    );
+    final p = (await backend.fetchProfile())!;
+    expect(p.privacyAcceptedAt, isNotNull);
+    expect(p.marketingOptIn, isTrue);
+
+    await backend.signOut();
+    await backend.signInWithEmail(DemoBackend.adminEmail, DemoBackend.adminPassword);
+    var customers = await backend.customers();
+    expect(customers.firstWhere((c) => c.email == 'offerte@test.it').marketingOptIn, isTrue);
+    final walkIn = customers.firstWhere((c) => c.isWalkIn && !c.marketingOptIn);
+    await backend.setWalkInConsent(walkIn.fullName, marketing: true);
+    customers = await backend.customers();
+    expect(customers.firstWhere((c) => c.id == walkIn.id).marketingOptIn, isTrue);
   });
 
   test('amministratori: email aggiunta diventa admin', () async {

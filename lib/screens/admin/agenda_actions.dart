@@ -41,7 +41,7 @@ List<(int, int)> freeRanges(
     if (e - s >= minGap) result.add((s, e));
   }
 
-  for (final h in b.hoursFor(day.weekday)) {
+  for (final h in b.hoursOn(day)) {
     var cur = h.start;
     for (final (s, e) in busy) {
       if (e <= cur) continue;

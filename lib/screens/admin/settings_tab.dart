@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../data/slots.dart';
 import '../../models.dart';
 import '../../state/app_state.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
 import 'export_sheet.dart';
+import 'shop_days_screen.dart';
 
 /// Informazioni del locale, regole di prenotazione, promemoria e amministratori.
 class SettingsTab extends StatefulWidget {
@@ -198,6 +200,8 @@ class _SettingsTabState extends State<SettingsTab> {
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
     final myEmail = state.profile?.email.toLowerCase();
+    final today = dayOnly(DateTime.now());
+    final nextDay = state.shopDays.where((d) => !d.day.isBefore(today)).firstOrNull;
 
     Widget tile(IconData icon, String title, String subtitle, {VoidCallback? onTap, Widget? trailing}) => GlassCard(
       margin: const EdgeInsets.only(bottom: 10),
@@ -274,6 +278,15 @@ class _SettingsTabState extends State<SettingsTab> {
                       _save();
                     },
             ),
+          ),
+          tile(
+            Icons.door_front_door_outlined,
+            'Chiusure e orari speciali',
+            nextDay == null
+                ? 'Ferie, festività e giorni con orario diverso'
+                : 'Prossimo: ${fmtDayShort(nextDay.day)} · '
+                      '${nextDay.closed ? 'chiuso' : '${formatTime(nextDay.open!)}–${formatTime(nextDay.close!)}'}',
+            onTap: () => Navigator.of(context).push(fadeRoute(const ShopDaysScreen())),
           ),
           tile(
             Icons.file_download_outlined,

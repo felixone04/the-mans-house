@@ -16,7 +16,7 @@ List<DateTime> availableSlots({
   final mine = busy.where((b) => b.barberId == barber.id).toList();
   final result = <DateTime>[];
 
-  for (final h in barber.hoursFor(d.weekday)) {
+  for (final h in barber.hoursOn(d)) {
     for (var m = h.start; m + durationMin <= h.end; m += stepMin) {
       final start = DateTime(d.year, d.month, d.day, 0, m);
       final end = start.add(Duration(minutes: durationMin));

@@ -25,6 +25,8 @@ class DemoBackend implements Backend {
   final _passwords = <String, String>{};
   final _profiles = <String, Profile>{}; // per email
   final _admins = <String>{adminEmail};
+  final _shopDays = <DateTime, ShopDay>{};
+  final _walkInMarketing = <String>{}; // clienti dal banco con consenso offerte
   Profile? _current;
 
   @override
@@ -131,9 +133,12 @@ class DemoBackend implements Backend {
       fullName: 'Titolare',
       phone: '+393330000000',
       isAdmin: true,
+      privacyAcceptedAt: DateTime.now(),
     );
 
     _seedAppointments();
+    // demo: due clienti dal banco hanno dato il consenso alle offerte
+    _walkInMarketing.addAll(['Marco Rossi', 'Luca Bianchi']);
   }
 
   void _seedAppointments() {
@@ -204,6 +209,7 @@ class DemoBackend implements Backend {
     required String password,
     required String fullName,
     required String phone,
+    bool marketingOptIn = false,
   }) => _delay(() {
     final e = email.trim().toLowerCase();
     if (_passwords.containsKey(e)) throw AppException('Esiste gia\' un account con questa email');
@@ -215,6 +221,9 @@ class DemoBackend implements Backend {
       fullName: fullName.trim(),
       phone: normalizePhone(phone),
       isAdmin: _admins.contains(e),
+      // come il trigger handle_new_user: la registrazione accetta l'informativa
+      privacyAcceptedAt: DateTime.now(),
+      marketingOptIn: marketingOptIn,
     );
     _profiles[e] = p;
     _signIn(p);
@@ -265,7 +274,9 @@ class DemoBackend implements Backend {
     cur
       ..fullName = p.fullName.trim()
       ..phone = normalizePhone(p.phone)
-      ..whatsappOptIn = p.whatsappOptIn;
+      ..whatsappOptIn = p.whatsappOptIn
+      ..privacyAcceptedAt = p.privacyAcceptedAt
+      ..marketingOptIn = p.marketingOptIn;
   });
 
   // --- Negozio ---
@@ -322,6 +333,24 @@ class DemoBackend implements Backend {
       throw AppException('Il barbiere ha appuntamenti in archivio: e\' stato disattivato.');
     }
     _barbers.removeWhere((b) => b.id == id);
+  });
+
+  @override
+  Future<List<ShopDay>> fetchShopDays() => _delay(() => _shopDays.values.toList()..sort((a, b) => a.day.compareTo(b.day)));
+
+  @override
+  Future<void> saveShopDays(List<ShopDay> days) => _delay(() {
+    if (!(_current?.isAdmin ?? false)) throw AppException('Operazione non consentita');
+    for (final d in days) {
+      _shopDays[d.day] = d;
+    }
+    ShopCalendar.set(_shopDays.values); // come il server, vale subito per le prenotazioni
+  });
+
+  @override
+  Future<void> deleteShopDay(DateTime day) => _delay(() {
+    _shopDays.remove(DateTime(day.year, day.month, day.day));
+    ShopCalendar.set(_shopDays.values);
   });
 
   @override
@@ -507,6 +536,8 @@ class DemoBackend implements Backend {
           phone: p.phone,
           bookings: mine.length,
           lastVisit: past.isEmpty ? null : past.last, // come admin_customers sul server
+          marketingOptIn: p.marketingOptIn,
+          privacyAcceptedAt: p.privacyAcceptedAt,
         ),
       );
     }
@@ -525,11 +556,18 @@ class DemoBackend implements Backend {
           phone: list2.first.customerPhone,
           bookings: list2.length,
           lastVisit: past.isEmpty ? null : past.last,
+          marketingOptIn: _walkInMarketing.contains(name),
         ),
       );
     });
     list.sort((a, b) => a.fullName.compareTo(b.fullName));
     return list;
+  });
+
+  @override
+  Future<void> setWalkInConsent(String customerName, {required bool marketing}) => _delay(() {
+    if (!(_current?.isAdmin ?? false)) throw AppException('Operazione non consentita');
+    marketing ? _walkInMarketing.add(customerName) : _walkInMarketing.remove(customerName);
   });
 
   @override

@@ -182,6 +182,15 @@ class Barber {
   List<WorkingHours> hoursFor(int weekday) =>
       hours.where((h) => h.weekday == weekday).toList()..sort((a, b) => a.start.compareTo(b.start));
 
+  /// Orari effettivi di un giorno preciso: quelli settimanali, salvo chiusure
+  /// e orari speciali del negozio ([ShopCalendar]).
+  List<WorkingHours> hoursOn(DateTime day) {
+    final s = ShopCalendar.forDay(day);
+    if (s == null) return hoursFor(day.weekday);
+    if (s.closed || !s.appliesTo(id)) return const [];
+    return [WorkingHours(weekday: day.weekday, start: s.open!, end: s.close!)];
+  }
+
   Barber copy() => Barber(
     id: id,
     name: name,
@@ -191,6 +200,59 @@ class Barber {
     sortOrder: sortOrder,
     hours: hours.map((h) => h.copy()).toList(),
   );
+}
+
+/// Giorno speciale per tutto il negozio: chiusura (orari nulli) oppure
+/// orario diverso dal solito, eventualmente solo per alcuni barbieri.
+class ShopDay {
+  DateTime day;
+  int? open; // minuti dalla mezzanotte; null = chiuso
+  int? close;
+  String note;
+
+  /// Barbieri al lavoro nell'orario speciale; vuoto = tutti.
+  List<String> barberIds;
+
+  ShopDay({required DateTime day, this.open, this.close, this.note = '', List<String>? barberIds})
+    : day = DateTime(day.year, day.month, day.day),
+      barberIds = barberIds ?? [];
+
+  bool get closed => open == null || close == null;
+
+  bool appliesTo(String barberId) => barberIds.isEmpty || barberIds.contains(barberId);
+
+  factory ShopDay.fromJson(Map<String, dynamic> j) => ShopDay(
+    day: DateTime.parse(j['day'] as String),
+    open: j['open_time'] == null ? null : parseTime(j['open_time']),
+    close: j['close_time'] == null ? null : parseTime(j['close_time']),
+    note: j['note'] ?? '',
+    barberIds: ((j['barber_ids'] as List?) ?? []).cast<String>(),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'day':
+        '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}',
+    'open_time': open == null ? null : formatTime(open!),
+    'close_time': close == null ? null : formatTime(close!),
+    'note': note,
+    'barber_ids': barberIds.isEmpty ? null : barberIds,
+  };
+}
+
+/// Calendario dei giorni speciali in uso (caricato da AppState e dal backend
+/// demo): lo leggono il calcolo degli orari liberi e l'agenda.
+class ShopCalendar {
+  static final _days = <DateTime, ShopDay>{};
+
+  static void set(Iterable<ShopDay> days) {
+    _days
+      ..clear()
+      ..addEntries(days.map((d) => MapEntry(d.day, d)));
+  }
+
+  static ShopDay? forDay(DateTime d) => _days[DateTime(d.year, d.month, d.day)];
+
+  static List<ShopDay> get all => _days.values.toList()..sort((a, b) => a.day.compareTo(b.day));
 }
 
 class TimeOff {
@@ -358,6 +420,12 @@ class Profile {
   bool isAdmin;
   bool whatsappOptIn;
 
+  /// Quando ha accettato l'informativa privacy (null = mai).
+  DateTime? privacyAcceptedAt;
+
+  /// Consenso a ricevere offerte e novita' (marketing).
+  bool marketingOptIn;
+
   Profile({
     required this.id,
     this.email = '',
@@ -365,6 +433,8 @@ class Profile {
     this.phone = '',
     this.isAdmin = false,
     this.whatsappOptIn = true,
+    this.privacyAcceptedAt,
+    this.marketingOptIn = false,
   });
 
   factory Profile.fromJson(Map<String, dynamic> j) => Profile(
@@ -374,9 +444,12 @@ class Profile {
     phone: j['phone'] ?? '',
     isAdmin: j['is_admin'] ?? false,
     whatsappOptIn: j['whatsapp_opt_in'] ?? true,
+    privacyAcceptedAt: j['privacy_accepted_at'] == null ? null : _dt(j['privacy_accepted_at']),
+    marketingOptIn: j['marketing_opt_in'] ?? false,
   );
 
-  bool get isComplete => fullName.trim().isNotEmpty && phone.trim().isNotEmpty;
+  /// Profilo utilizzabile: nome, cellulare e informativa privacy accettata.
+  bool get isComplete => fullName.trim().isNotEmpty && phone.trim().isNotEmpty && privacyAcceptedAt != null;
 
   String get firstName => fullName.trim().split(' ').first;
 }
@@ -389,6 +462,11 @@ class CustomerSummary {
   final int bookings;
   final DateTime? lastVisit;
 
+  /// Consenso a ricevere offerte (dal profilo o, per i clienti dal banco,
+  /// segnato in negozio) e data di accettazione dell'informativa privacy.
+  final bool marketingOptIn;
+  final DateTime? privacyAcceptedAt;
+
   CustomerSummary({
     required this.id,
     required this.email,
@@ -396,6 +474,8 @@ class CustomerSummary {
     required this.phone,
     required this.bookings,
     this.lastVisit,
+    this.marketingOptIn = false,
+    this.privacyAcceptedAt,
   });
 
   factory CustomerSummary.fromJson(Map<String, dynamic> j) => CustomerSummary(
@@ -405,6 +485,8 @@ class CustomerSummary {
     phone: j['phone'] ?? '',
     bookings: (j['bookings'] as num?)?.toInt() ?? 0,
     lastVisit: j['last_visit'] == null ? null : _dt(j['last_visit']),
+    marketingOptIn: j['marketing_opt_in'] ?? false,
+    privacyAcceptedAt: j['privacy_accepted_at'] == null ? null : _dt(j['privacy_accepted_at']),
   );
 
   /// Cliente inserito dal banco (senza account): id "banco:" seguito dal nome.

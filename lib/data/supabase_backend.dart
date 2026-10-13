@@ -59,12 +59,19 @@ class SupabaseBackend implements Backend {
     required String password,
     required String fullName,
     required String phone,
+    bool marketingOptIn = false,
   }) => _guard(() async {
     final res = await _db.auth.signUp(
       email: email.trim(),
       password: password,
       emailRedirectTo: _redirect,
-      data: {'full_name': fullName.trim(), 'phone': normalizePhone(phone)},
+      // letti dal trigger handle_new_user che crea il profilo
+      data: {
+        'full_name': fullName.trim(),
+        'phone': normalizePhone(phone),
+        'privacy_accepted': true,
+        'marketing_opt_in': marketingOptIn,
+      },
     );
     return res.session != null;
   });
@@ -106,7 +113,13 @@ class SupabaseBackend implements Backend {
   Future<void> updateProfile(Profile p) => _guard(() async {
     await _db
         .from('profiles')
-        .update({'full_name': p.fullName.trim(), 'phone': normalizePhone(p.phone), 'whatsapp_opt_in': p.whatsappOptIn})
+        .update({
+          'full_name': p.fullName.trim(),
+          'phone': normalizePhone(p.phone),
+          'whatsapp_opt_in': p.whatsappOptIn,
+          'privacy_accepted_at': p.privacyAcceptedAt?.toUtc().toIso8601String(),
+          'marketing_opt_in': p.marketingOptIn,
+        })
         .eq('id', p.id);
   });
 
@@ -172,6 +185,23 @@ class SupabaseBackend implements Backend {
       rethrow;
     }
   });
+
+  @override
+  Future<List<ShopDay>> fetchShopDays() => _guard(() async {
+        final rows = await _db.from('shop_days').select().order('day');
+        return rows.map(ShopDay.fromJson).toList();
+      });
+
+  @override
+  Future<void> saveShopDays(List<ShopDay> days) => _guard(() async {
+        if (days.isEmpty) return;
+        await _db.from('shop_days').upsert(days.map((d) => d.toJson()).toList());
+      });
+
+  @override
+  Future<void> deleteShopDay(DateTime day) => _guard(() async {
+        await _db.from('shop_days').delete().eq('day', ShopDay(day: day).toJson()['day'] as String);
+      });
 
   @override
   Future<List<TimeOff>> fetchTimeOff(String barberId) => _guard(() async {
@@ -307,6 +337,15 @@ class SupabaseBackend implements Backend {
     final rows = await q.order('start_at', ascending: false).limit(200);
     return rows.map(Appointment.fromJson).toList();
   });
+
+  @override
+  Future<void> setWalkInConsent(String customerName, {required bool marketing}) => _guard(() async {
+        await _db.from('walkin_consents').upsert({
+          'name': customerName,
+          'marketing_opt_in': marketing,
+          'privacy_accepted_at': DateTime.now().toUtc().toIso8601String(),
+        });
+      });
 
   @override
   Future<List<String>> adminEmails() => _guard(() async {

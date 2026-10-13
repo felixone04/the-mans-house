@@ -157,15 +157,41 @@ class _AccountButton extends StatelessWidget {
 
 void showHoursSheet(BuildContext context, List<Barber> barbers) {
   final today = DateTime.now().weekday;
+  // chiusure e orari speciali dei prossimi 60 giorni
+  final now = dayOnly(DateTime.now());
+  final special = AppScope.read(context).shopDays
+      .where((d) => !d.day.isBefore(now) && d.day.isBefore(now.add(const Duration(days: 60))))
+      .toList();
   showModalBottomSheet<void>(
     context: context,
+    isScrollControlled: true,
     constraints: const BoxConstraints(maxWidth: 520),
     builder: (c) => SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (special.isNotEmpty) ...[
+              Text('CHIUSURE E ORARI SPECIALI', style: slab(size: 14, weight: FontWeight.w600, color: AppColors.warning)),
+              const SizedBox(height: 10),
+              for (final d in special)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(fmtDayShort(d.day), style: const TextStyle(fontWeight: FontWeight.w700))),
+                      Text(
+                        d.closed
+                            ? 'Chiuso${d.note.isEmpty ? '' : ' · ${d.note}'}'
+                            : '${formatTime(d.open!)} – ${formatTime(d.close!)}',
+                        style: TextStyle(color: d.closed ? AppColors.warning : AppColors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 18),
+            ],
             Text('ORARI DI APERTURA', style: slab(size: 16, weight: FontWeight.w600)),
             const SizedBox(height: 16),
             for (var d = 1; d <= 7; d++)

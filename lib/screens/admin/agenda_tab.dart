@@ -112,7 +112,7 @@ class _AgendaTabState extends State<AgendaTab> with AgendaActions {
   (int, int) _range(List<Barber> barbers, List<Appointment> items) {
     var start = 24 * 60, end = 0;
     for (final b in barbers) {
-      for (final h in b.hoursFor(_day.weekday)) {
+      for (final h in b.hoursOn(_day)) {
         if (h.start < start) start = h.start;
         if (h.end > end) end = h.end;
       }
@@ -406,7 +406,7 @@ class _AgendaHeader extends StatelessWidget {
                   count: light ? 0 : week.where((a) => dayOnly(a.start) == days[i] && _counts(a)).length,
                   light: light,
                   open: barbers.any(
-                    (b) => (filter == null || b.id == filter) && b.hoursFor(days[i].weekday).isNotEmpty,
+                    (b) => (filter == null || b.id == filter) && b.hoursOn(days[i]).isNotEmpty,
                   ),
                   onTap: () => onDay(days[i]),
                 ),
@@ -441,7 +441,7 @@ class _AgendaHeader extends StatelessWidget {
                     label: b.name,
                     color: barberColor(barbers, b.id),
                     selected: filter == b.id,
-                    dimmed: b.hoursFor(day.weekday).isEmpty,
+                    dimmed: b.hoursOn(day).isEmpty,
                     onTap: () => onFilter(filter == b.id ? null : b.id),
                   ),
               ],
@@ -890,7 +890,7 @@ class _DayCalendarState extends State<_DayCalendar> {
       ..sort((x, y) => x.start.compareTo(y.start));
     final off = widget.timeOff[b.id] ?? [];
     final color = barberColor(widget.allBarbers, b.id);
-    bool works(int m) => b.hoursFor(day.weekday).any((h) => m >= h.start && m < h.end);
+    bool works(int m) => b.hoursOn(day).any((h) => m >= h.start && m < h.end);
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
@@ -913,7 +913,7 @@ class _DayCalendarState extends State<_DayCalendar> {
         child: Stack(
           children: [
             // Fasce di lavoro
-            for (final h in b.hoursFor(day.weekday))
+            for (final h in b.hoursOn(day))
               Positioned(
                 top: _y(h.start),
                 height: (h.end - h.start) * ppm,

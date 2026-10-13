@@ -20,7 +20,11 @@ class _CustomerScreenState extends State<CustomerScreen> {
   List<Appointment> _items = [];
   bool _loading = true;
 
-  CustomerSummary get c => widget.customer;
+  /// Dati aggiornati del cliente (consensi): aperta dall'agenda la scheda
+  /// riceve solo nome e telefono.
+  CustomerSummary? _fresh;
+
+  CustomerSummary get c => _fresh ?? widget.customer;
 
   @override
   void initState() {
@@ -29,13 +33,28 @@ class _CustomerScreenState extends State<CustomerScreen> {
   }
 
   Future<void> _load() async {
+    final backend = AppScope.read(context).backend;
     try {
-      final list = await AppScope.read(context).backend.customerAppointments(c);
-      if (mounted) setState(() => _items = list);
+      final results = await Future.wait([backend.customerAppointments(widget.customer), backend.customers()]);
+      if (mounted) {
+        setState(() {
+          _items = results[0] as List<Appointment>;
+          _fresh = (results[1] as List<CustomerSummary>).where((x) => x.id == widget.customer.id).firstOrNull;
+        });
+      }
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _setMarketing(bool value) async {
+    try {
+      await AppScope.read(context).backend.setWalkInConsent(c.fullName, marketing: value);
+      await _load();
+    } catch (e) {
+      if (mounted) showError(context, e);
     }
   }
 
@@ -217,6 +236,40 @@ class _CustomerScreenState extends State<CustomerScreen> {
                                 _InfoRow(Icons.history, 'Primo appuntamento', first == null ? '–' : fmtDayShort(first)),
                               ],
                             ),
+                          ),
+                          const SectionTitle('Consensi'),
+                          GlassCard(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                            child: c.isWalkIn
+                                // cliente dal banco: il consenso lo da' a voce in negozio
+                                ? SwitchListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    value: c.marketingOptIn,
+                                    onChanged: _setMarketing,
+                                    title: const Text('Accetta offerte e novità'),
+                                    subtitle: Text(
+                                      c.privacyAcceptedAt == null
+                                          ? 'Attivalo se il cliente ti ha dato il consenso in negozio'
+                                          : 'Consenso registrato il ${fmtDayShort(c.privacyAcceptedAt!)}',
+                                      style: const TextStyle(color: AppColors.muted, fontSize: 12.5),
+                                    ),
+                                  )
+                                : Column(
+                                    children: [
+                                      _InfoRow(
+                                        Icons.privacy_tip_outlined,
+                                        'Informativa privacy',
+                                        c.privacyAcceptedAt == null
+                                            ? 'non ancora accettata'
+                                            : 'accettata il ${fmtDayShort(c.privacyAcceptedAt!)}',
+                                      ),
+                                      _InfoRow(
+                                        Icons.campaign_outlined,
+                                        'Offerte e novità',
+                                        c.marketingOptIn ? 'sì' : 'no (lo sceglie dal suo profilo)',
+                                      ),
+                                    ],
+                                  ),
                           ),
                           if (upcoming.isNotEmpty) ...[
                             const SectionTitle('Prossimi appuntamenti'),

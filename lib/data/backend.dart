@@ -23,11 +23,14 @@ abstract class Backend {
   Future<void> signInWithEmail(String email, String password);
 
   /// Ritorna false se serve confermare l'email prima di accedere.
+  /// La registrazione implica l'accettazione dell'informativa privacy;
+  /// [marketingOptIn] e' il consenso facoltativo a offerte e novita'.
   Future<bool> signUpWithEmail({
     required String email,
     required String password,
     required String fullName,
     required String phone,
+    bool marketingOptIn = false,
   });
   Future<void> signInWithGoogle();
   Future<void> signInWithApple();
@@ -49,6 +52,11 @@ abstract class Backend {
   Future<List<Barber>> fetchBarbers({bool includeInactive = false});
   Future<void> saveBarber(Barber barber);
   Future<void> deleteBarber(String id);
+
+  /// Chiusure e orari speciali del negozio (dati pubblici).
+  Future<List<ShopDay>> fetchShopDays();
+  Future<void> saveShopDays(List<ShopDay> days);
+  Future<void> deleteShopDay(DateTime day);
 
   Future<List<TimeOff>> fetchTimeOff(String barberId);
   Future<void> addTimeOff(TimeOff timeOff);
@@ -86,6 +94,9 @@ abstract class Backend {
 
   /// Tutti gli appuntamenti di un cliente (scheda cliente), dal piu' recente.
   Future<List<Appointment>> customerAppointments(CustomerSummary customer);
+
+  /// Consensi di un cliente dal banco (dati a voce in negozio).
+  Future<void> setWalkInConsent(String customerName, {required bool marketing});
   Future<List<String>> adminEmails();
   Future<void> addAdminEmail(String email);
   Future<void> removeAdminEmail(String email);

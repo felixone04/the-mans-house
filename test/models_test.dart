@@ -55,10 +55,34 @@ void main() {
     expect(b.initials, 'MR');
   });
 
-  test('Profile.isComplete richiede nome e telefono', () {
-    expect(Profile(id: '1', fullName: 'Mario', phone: '+393331234567').isComplete, isTrue);
-    expect(Profile(id: '1', fullName: 'Mario').isComplete, isFalse);
-    expect(Profile(id: '1', phone: '+393331234567').isComplete, isFalse);
+  test('Profile.isComplete richiede nome, telefono e informativa privacy accettata', () {
+    final accepted = DateTime(2026, 10, 13);
+    expect(Profile(id: '1', fullName: 'Mario', phone: '+393331234567', privacyAcceptedAt: accepted).isComplete, isTrue);
+    expect(Profile(id: '1', fullName: 'Mario', phone: '+393331234567').isComplete, isFalse);
+    expect(Profile(id: '1', fullName: 'Mario', privacyAcceptedAt: accepted).isComplete, isFalse);
+    expect(Profile(id: '1', phone: '+393331234567', privacyAcceptedAt: accepted).isComplete, isFalse);
+  });
+
+  test('ShopDay: chiusura, orario speciale solo per alcuni barbieri, JSON', () {
+    final b = Barber(id: 'b1', name: 'Antonio', hours: [WorkingHours(weekday: 2, start: 540, end: 1200)]);
+    final tuesday = DateTime(2026, 10, 20); // martedi'
+    expect(b.hoursOn(tuesday).single.start, 540);
+
+    ShopCalendar.set([ShopDay(day: tuesday, note: 'Ferie')]);
+    expect(b.hoursOn(tuesday), isEmpty);
+
+    final sunday = DateTime(2026, 10, 25);
+    ShopCalendar.set([
+      ShopDay(day: sunday, open: 540, close: 780, barberIds: ['b1']),
+    ]);
+    expect(b.hoursOn(sunday).single.end, 780);
+    expect(Barber(id: 'b2', name: 'Giuseppe').hoursOn(sunday), isEmpty);
+
+    final json = ShopDay(day: sunday, open: 540, close: 780, note: 'x').toJson();
+    expect(json, {'day': '2026-10-25', 'open_time': '09:00', 'close_time': '13:00', 'note': 'x', 'barber_ids': null});
+    final back = ShopDay.fromJson({...json, 'open_time': '09:00:00', 'close_time': '13:00:00'});
+    expect((back.open, back.close, back.closed), (540, 780, false));
+    ShopCalendar.set(const []);
   });
 
   test('Appointment.isUpcoming solo se confermato e futuro', () {

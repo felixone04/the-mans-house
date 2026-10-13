@@ -30,15 +30,20 @@ class AppState extends ChangeNotifier {
     return up.isEmpty ? null : up.first;
   }
 
+  /// Chiusure e orari speciali del negozio (anche in [ShopCalendar]).
+  List<ShopDay> shopDays = [];
+
   Future<void> load() async {
     final results = await Future.wait([
       backend.fetchSettings(),
       backend.fetchServices(),
       backend.fetchBarbers(),
+      backend.fetchShopDays(),
     ]);
     settings = results[0] as ShopSettings;
     services = results[1] as List<Service>;
     barbers = results[2] as List<Barber>;
+    _setShopDays(results[3] as List<ShopDay>);
     await refreshProfile();
   }
 
@@ -46,7 +51,18 @@ class AppState extends ChangeNotifier {
     services = await backend.fetchServices();
     barbers = await backend.fetchBarbers();
     settings = await backend.fetchSettings();
+    _setShopDays(await backend.fetchShopDays());
     notifyListeners();
+  }
+
+  Future<void> refreshShopDays() async {
+    _setShopDays(await backend.fetchShopDays());
+    notifyListeners();
+  }
+
+  void _setShopDays(List<ShopDay> days) {
+    shopDays = days;
+    ShopCalendar.set(days);
   }
 
   Future<void> refreshProfile() async {

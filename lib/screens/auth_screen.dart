@@ -5,6 +5,7 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'complete_profile_screen.dart';
+import 'privacy_screen.dart';
 
 /// Apre login/registrazione e, se serve, il completamento profilo.
 /// Ritorna true se al termine l'utente e' autenticato con profilo completo.
@@ -37,6 +38,7 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _loading = false;
   bool _obscure = true;
   bool _privacy = false;
+  bool _marketing = false;
   bool _closed = false;
 
   @override
@@ -72,6 +74,7 @@ class _AuthScreenState extends State<AuthScreen> {
           password: _password.text,
           fullName: _name.text,
           phone: _phone.text,
+          marketingOptIn: _marketing,
         );
         if (!signedIn) {
           if (!mounted) return;
@@ -201,29 +204,20 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                   validator: (v) => (v ?? '').length < 6 ? 'Minimo 6 caratteri' : null,
                 ),
-                if (_register)
-                  InkWell(
-                    onTap: () => setState(() => _privacy = !_privacy),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Row(
-                        children: [
-                          Checkbox(
-                            value: _privacy,
-                            onChanged: (v) => setState(() => _privacy = v ?? false),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          const Expanded(
-                            child: Text(
-                              'Accetto l\'informativa privacy e i promemoria degli appuntamenti su WhatsApp',
-                              style: TextStyle(fontSize: 12.5, color: AppColors.silver),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                else
+                if (_register) ...[
+                  const SizedBox(height: 4),
+                  ConsentBox(
+                    value: _privacy,
+                    onChanged: (v) => setState(() => _privacy = v),
+                    text: 'Ho letto l\'informativa privacy e accetto i promemoria degli appuntamenti su WhatsApp (obbligatorio)',
+                  ),
+                  ConsentBox(
+                    value: _marketing,
+                    onChanged: (v) => setState(() => _marketing = v),
+                    text: 'Voglio ricevere offerte e novità su WhatsApp (facoltativo)',
+                  ),
+                  const Align(alignment: Alignment.centerLeft, child: PrivacyLink()),
+                ] else
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(onPressed: _loading ? null : _forgot, child: const Text('Password dimenticata?')),

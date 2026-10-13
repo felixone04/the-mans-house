@@ -23,6 +23,9 @@ Backend: **Supabase** (database, login, funzioni). Promemoria: **WhatsApp** (Met
 - Tocca uno spazio libero per inserire un appuntamento; tienilo premuto (o "+" → Blocca un orario) per bloccarlo (pausa, imprevisto...). Tocca un blocco per rimuoverlo
 - **Cliente entrato ora** (menu "+" dell'agenda o pulsante "Entrato ora" nella giornata del barbiere): servizio, barbiere o "primo libero", nome facoltativo → inserito nel primo orario libero da adesso
 - **Cerca** (lente in alto nell'area riservata): nome o numero → cliente con il prossimo appuntamento, tocca per la scheda cliente
+- **Chiusure e orari speciali** (Impostazioni): ferie e festività (niente prenotazioni) e giorni con orario diverso, anche solo per alcuni barbieri; i clienti li vedono in "Orari"
+- **Messaggio a tutti** (Clienti): avviso di servizio a tutti i clienti con cellulare o promozione solo a chi ha dato il consenso; ogni tocco apre WhatsApp con il messaggio pronto e segna il cliente come fatto
+- **Consensi**: alla registrazione informativa privacy (obbligatoria) e offerte (facoltativo), modificabili dal profilo; per i clienti dal banco si segnano nella scheda cliente
 - **Esporta dati** (Impostazioni): clienti e incassi (mese, mese scorso, anno o periodo a scelta) in un file .csv per Excel, con totali per barbiere
 - Servizi: aggiungi, modifica prezzo e durata, nascondi, elimina
 - Barbieri: orari settimanali con più fasce al giorno, ferie e permessi
@@ -54,6 +57,7 @@ flutter run -d chrome
    - `supabase/migrations/20261010000000_init.sql` (tabelle, sicurezza, funzioni)
    - `supabase/migrations/20261013000000_reschedule.sql` (spostamento appuntamenti)
    - `supabase/migrations/20261013010000_visit_payment.sql` (arrivo e pagamenti)
+   - `supabase/migrations/20261013020000_shop_days_consents.sql` (chiusure, orari speciali, consensi)
    - `supabase/seed.sql` (servizi, 3 barbieri e orari di esempio, da modificare poi in app)
 3. Imposta l'email del titolare come amministratore:
    ```sql

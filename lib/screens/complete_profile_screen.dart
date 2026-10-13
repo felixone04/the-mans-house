@@ -4,6 +4,7 @@ import '../models.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'privacy_screen.dart';
 
 /// Richiede nome e cellulare (per i promemoria WhatsApp) dopo il login
 /// con Google/Apple o per modificare il profilo.
@@ -20,6 +21,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   late final TextEditingController _name;
   late final TextEditingController _phone;
   late bool _optIn;
+  late bool _marketing;
+  late bool _privacy;
+  late final bool _privacyAlreadyAccepted;
   bool _loading = false;
 
   @override
@@ -29,6 +33,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     _name = TextEditingController(text: p?.fullName ?? '');
     _phone = TextEditingController(text: (p?.phone.isNotEmpty ?? false) ? p!.phone : '+39 ');
     _optIn = p?.whatsappOptIn ?? true;
+    _marketing = p?.marketingOptIn ?? false;
+    _privacyAlreadyAccepted = p?.privacyAcceptedAt != null;
+    _privacy = _privacyAlreadyAccepted;
   }
 
   @override
@@ -40,6 +47,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
 
   Future<void> _save() async {
     if (!_form.currentState!.validate()) return;
+    if (!_privacy) {
+      showMessage(context, 'Accetta l\'informativa privacy per continuare', error: true);
+      return;
+    }
     final state = AppScope.read(context);
     final p = state.profile;
     if (p == null) return;
@@ -53,6 +64,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
           phone: _phone.text,
           isAdmin: p.isAdmin,
           whatsappOptIn: _optIn,
+          privacyAcceptedAt: p.privacyAcceptedAt ?? DateTime.now(),
+          marketingOptIn: _marketing,
         ),
       );
       await state.refreshProfile();
@@ -122,7 +135,25 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                     style: TextStyle(color: AppColors.muted, fontSize: 12.5),
                   ),
                 ),
-                const SizedBox(height: 20),
+                SwitchListTile(
+                  value: _marketing,
+                  onChanged: (v) => setState(() => _marketing = v),
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Offerte e novità su WhatsApp'),
+                  subtitle: const Text(
+                    'Facoltativo: puoi cambiare idea quando vuoi',
+                    style: TextStyle(color: AppColors.muted, fontSize: 12.5),
+                  ),
+                ),
+                // l'informativa si accetta una volta: poi resta solo il collegamento
+                if (!_privacyAlreadyAccepted)
+                  ConsentBox(
+                    value: _privacy,
+                    onChanged: (v) => setState(() => _privacy = v),
+                    text: 'Ho letto l\'informativa privacy (obbligatorio)',
+                  ),
+                const Align(alignment: Alignment.centerLeft, child: PrivacyLink()),
+                const SizedBox(height: 12),
                 PrimaryButton(label: 'Salva', loading: _loading, onPressed: _save),
                 const SizedBox(height: 24),
               ],
