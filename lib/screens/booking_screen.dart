@@ -906,50 +906,53 @@ class _PriceListRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = service;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.white.withValues(alpha: 0.08) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: Border(bottom: BorderSide(color: AppColors.white.withValues(alpha: 0.08))),
+    // un blocco incorniciato per servizio: icona in un quadrato, nome e durata, prezzo a destra
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: selected ? AppColors.white.withValues(alpha: 0.10) : Colors.white.withValues(alpha: 0.03),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: selected ? AppColors.white : AppColors.white.withValues(alpha: 0.16),
+            width: selected ? 1.4 : 1,
+          ),
         ),
-        child: Row(
-          children: [
-            ServiceIcon(s.name, selected: selected),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  LayoutBuilder(
-                    builder: (context, c) => Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        // il nome prende lo spazio che serve, i puntini riempiono il resto
-                        ConstrainedBox(
-                          constraints: BoxConstraints(maxWidth: c.maxWidth - 84),
-                          child: Text(s.name, style: slab(size: 16, weight: FontWeight.w600, spacing: 0.3)),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              children: [
+                ServiceIcon(s.name, size: 56, selected: selected, square: true),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(s.name, style: slab(size: 16, weight: FontWeight.w600, spacing: 0.3)),
+                      const SizedBox(height: 3),
+                      Text(
+                        fmtDuration(s.durationMin),
+                        style: const TextStyle(color: AppColors.silver, fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      if (s.description.isNotEmpty)
+                        Text(
+                          s.description,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: AppColors.muted, fontSize: 12.5),
                         ),
-                        const Expanded(
-                          child: Padding(padding: EdgeInsets.only(bottom: 5), child: DottedLeader()),
-                        ),
-                        Text(fmtPrice(s.price), style: slab(size: 17, weight: FontWeight.w700, spacing: 0.4)),
-                      ],
-                    ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    [fmtDuration(s.durationMin), if (s.description.isNotEmpty) s.description].join('  ·  '),
-                    style: const TextStyle(color: AppColors.muted, fontSize: 12.5),
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 10),
+                Text(fmtPrice(s.price), style: slab(size: 19, weight: FontWeight.w700, spacing: 0.2)),
+                const SizedBox(width: 6),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

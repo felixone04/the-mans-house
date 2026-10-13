@@ -352,10 +352,13 @@ class _DotsPainter extends CustomPainter {
 
 /// Icona del servizio in base al nome.
 class ServiceIcon extends StatelessWidget {
-  const ServiceIcon(this.name, {super.key, this.size = 40, this.selected = false});
+  const ServiceIcon(this.name, {super.key, this.size = 40, this.selected = false, this.square = false});
   final String name;
   final double size;
   final bool selected;
+
+  /// Riquadro pieno con angoli arrotondati (listino a blocchi) invece del cerchio.
+  final bool square;
 
   @override
   Widget build(BuildContext context) {
@@ -382,11 +385,17 @@ class ServiceIcon extends StatelessWidget {
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: selected ? AppColors.white : Colors.transparent,
-        border: Border.all(color: AppColors.white.withValues(alpha: selected ? 1 : 0.3)),
-      ),
+      decoration: square
+          ? BoxDecoration(
+              borderRadius: BorderRadius.circular(size * 0.2),
+              color: selected ? AppColors.white : AppColors.white.withValues(alpha: 0.07),
+              border: Border.all(color: AppColors.white.withValues(alpha: selected ? 1 : 0.12)),
+            )
+          : BoxDecoration(
+              shape: BoxShape.circle,
+              color: selected ? AppColors.white : Colors.transparent,
+              border: Border.all(color: AppColors.white.withValues(alpha: selected ? 1 : 0.3)),
+            ),
       alignment: Alignment.center,
       child: icon,
     );
