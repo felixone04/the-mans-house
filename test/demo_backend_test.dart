@@ -302,6 +302,36 @@ void main() {
     expect(list.every((a) => a.customerName == walkIn.fullName && a.userId == null), isTrue);
   });
 
+  test('arrivo e pagamento: solo l\'admin, acconto e resto da incassare', () async {
+    await signUp('visita@test.it');
+    final barber = (await backend.fetchBarbers()).first;
+    final service = (await backend.fetchServices()).first;
+    final start = await freeSlot(barber, service, DateTime.now().add(const Duration(hours: 4)));
+    final a = await backend.book(barberId: barber.id, serviceId: service.id, start: start);
+    expect(a.payment, PaymentStatus.unpaid);
+    expect(a.outstanding, 0); // non ancora svolto
+
+    // il cliente non puo' segnarsi come pagato
+    await expectLater(
+      () => backend.updateVisit(a.id, arrivedAt: DateTime.now(), payment: PaymentStatus.paid, amountPaid: a.price),
+      throwsA(isA<AppException>()),
+    );
+
+    await backend.signOut();
+    await backend.signInWithEmail(DemoBackend.adminEmail, DemoBackend.adminPassword);
+    final arrived = DateTime.now();
+    await backend.updateVisit(a.id, arrivedAt: arrived, payment: PaymentStatus.deposit, amountPaid: 5);
+    final day = dayOnly(start);
+    var saved = (await backend.appointmentsBetween(day, day.add(const Duration(days: 1)))).firstWhere((x) => x.id == a.id);
+    expect(saved.arrivedAt, arrived);
+    expect(saved.collected, 5);
+    expect(saved.outstanding, service.price - 5);
+
+    await backend.updateVisit(a.id, arrivedAt: arrived, payment: PaymentStatus.paid, amountPaid: service.price);
+    saved = (await backend.appointmentsBetween(day, day.add(const Duration(days: 1)))).firstWhere((x) => x.id == a.id);
+    expect(saved.outstanding, 0);
+  });
+
   test('amministratori: email aggiunta diventa admin', () async {
     await signUp('socio@test.it');
     await backend.signOut();

@@ -254,6 +254,23 @@ String statusLabel(AppointmentStatus s) => switch (s) {
   AppointmentStatus.confirmed => 'Confermato',
 };
 
+/// Pagamento di un appuntamento (segnato dal negozio).
+enum PaymentStatus { unpaid, paid, later, deposit }
+
+PaymentStatus paymentFromString(String? s) => switch (s) {
+  'paid' => PaymentStatus.paid,
+  'later' => PaymentStatus.later,
+  'deposit' => PaymentStatus.deposit,
+  _ => PaymentStatus.unpaid,
+};
+
+String paymentToString(PaymentStatus p) => switch (p) {
+  PaymentStatus.paid => 'paid',
+  PaymentStatus.later => 'later',
+  PaymentStatus.deposit => 'deposit',
+  PaymentStatus.unpaid => 'unpaid',
+};
+
 class Appointment {
   String id;
   String? userId;
@@ -270,6 +287,13 @@ class Appointment {
   String notes;
   bool createdByAdmin;
 
+  /// Ora di arrivo del cliente in negozio (null = non ancora arrivato).
+  DateTime? arrivedAt;
+  PaymentStatus payment;
+
+  /// Importo gia' pagato (acconto); per [PaymentStatus.paid] vale il prezzo.
+  double amountPaid;
+
   Appointment({
     required this.id,
     this.userId,
@@ -285,6 +309,9 @@ class Appointment {
     this.customerPhone = '',
     this.notes = '',
     this.createdByAdmin = false,
+    this.arrivedAt,
+    this.payment = PaymentStatus.unpaid,
+    this.amountPaid = 0,
   });
 
   factory Appointment.fromJson(Map<String, dynamic> j) => Appointment(
@@ -302,9 +329,25 @@ class Appointment {
     customerPhone: j['customer_phone'] ?? '',
     notes: j['notes'] ?? '',
     createdByAdmin: j['created_by_admin'] ?? false,
+    arrivedAt: j['arrived_at'] == null ? null : _dt(j['arrived_at']),
+    payment: paymentFromString(j['payment_status']),
+    amountPaid: _num(j['amount_paid']),
   );
 
   bool get isUpcoming => status == AppointmentStatus.confirmed && start.isAfter(DateTime.now());
+
+  /// Incassato finora.
+  double get collected => switch (payment) {
+    PaymentStatus.paid => price,
+    PaymentStatus.deposit => amountPaid.clamp(0, price).toDouble(),
+    _ => 0,
+  };
+
+  /// Ancora da incassare per un servizio svolto (o con pagamento rimandato).
+  double get outstanding =>
+      status == AppointmentStatus.completed || payment == PaymentStatus.later || payment == PaymentStatus.deposit
+      ? price - collected
+      : 0;
 }
 
 class Profile {

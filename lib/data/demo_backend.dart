@@ -169,6 +169,8 @@ class DemoBackend implements Backend {
                 start: start,
                 end: end,
                 status: start.isBefore(DateTime.now()) ? AppointmentStatus.completed : AppointmentStatus.confirmed,
+                arrivedAt: start.isBefore(DateTime.now()) ? start : null,
+                payment: start.isBefore(DateTime.now()) ? PaymentStatus.paid : PaymentStatus.unpaid,
                 customerName: names[_rand.nextInt(names.length)],
                 customerPhone: '+39 333 ${1000000 + _rand.nextInt(8999999)}',
               ),
@@ -432,13 +434,16 @@ class DemoBackend implements Backend {
     if (!me.isAdmin && start.isAfter(DateTime.now().add(Duration(days: _settings.bookingDaysAhead + 1)))) {
       throw AppException('Data troppo lontana');
     }
-    final barber = _barbers.firstWhere((b) => b.id == barberId && b.active,
-        orElse: () => throw AppException('Barbiere non disponibile'));
+    final barber = _barbers.firstWhere(
+      (b) => b.id == barberId && b.active,
+      orElse: () => throw AppException('Barbiere non disponibile'),
+    );
     final duration = a.end.difference(a.start);
     // l'appuntamento stesso non occupa l'orario in cui viene spostato
-    final busy = (await fetchBusy(dayOnly(start), dayOnly(start).add(const Duration(days: 1))))
-        .where((b) => b.timeOff || b.barberId != a.barberId || b.start != a.start || b.end != a.end)
-        .toList();
+    final busy = (await fetchBusy(
+      dayOnly(start),
+      dayOnly(start).add(const Duration(days: 1)),
+    )).where((b) => b.timeOff || b.barberId != a.barberId || b.start != a.start || b.end != a.end).toList();
     final ok = availableSlots(
       barber: barber,
       durationMin: duration.inMinutes,
@@ -473,6 +478,20 @@ class DemoBackend implements Backend {
   @override
   Future<void> setAppointmentStatus(String id, AppointmentStatus status) =>
       _delay(() => _appointments.firstWhere((a) => a.id == id).status = status);
+
+  @override
+  Future<void> updateVisit(
+    String id, {
+    required DateTime? arrivedAt,
+    required PaymentStatus payment,
+    required double amountPaid,
+  }) => _delay(() {
+    if (!(_current?.isAdmin ?? false)) throw AppException('Operazione non consentita');
+    _appointments.firstWhere((a) => a.id == id)
+      ..arrivedAt = arrivedAt
+      ..payment = payment
+      ..amountPaid = amountPaid;
+  });
 
   @override
   Future<List<CustomerSummary>> customers() => _delay(() {

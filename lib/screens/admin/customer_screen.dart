@@ -70,6 +70,8 @@ class _CustomerScreenState extends State<CustomerScreen> {
     final noShow = _items.where((a) => a.status == AppointmentStatus.noShow).length;
     final cancelled = _items.where((a) => a.status == AppointmentStatus.cancelled).length;
     final spent = done.fold<double>(0, (s, a) => s + a.price);
+    // resti di acconti e pagamenti rimandati
+    final owed = _items.where((a) => a.status != AppointmentStatus.cancelled).fold<double>(0, (s, a) => s + a.outstanding);
     final upcoming = _items.where((a) => a.isUpcoming).toList()..sort((a, b) => a.start.compareTo(b.start));
     final history = _items.where((a) => !a.isUpcoming).toList();
     final kept = _items.where((a) => a.status != AppointmentStatus.cancelled && a.status != AppointmentStatus.noShow);
@@ -129,8 +131,11 @@ class _CustomerScreenState extends State<CustomerScreen> {
                                     ),
                                   ],
                                 ),
-                                if (noShow >= 2) ...[
-                                  const SizedBox(height: 12),
+                                for (final warning in [
+                                  if (owed > 0) 'Deve ancora ${fmtPrice(owed)}',
+                                  if (noShow >= 2) 'Non si è presentato $noShow volte',
+                                ]) ...[
+                                  const SizedBox(height: 10),
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                                     decoration: BoxDecoration(
@@ -143,7 +148,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
-                                            'Non si è presentato $noShow volte',
+                                            warning,
                                             style: const TextStyle(color: AppColors.warning, fontWeight: FontWeight.w700),
                                           ),
                                         ),

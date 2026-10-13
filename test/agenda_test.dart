@@ -5,11 +5,14 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:the_mans_house/data/demo_backend.dart';
 import 'package:the_mans_house/data/slots.dart';
+import 'package:the_mans_house/models.dart';
 import 'package:the_mans_house/screens/admin/agenda_tab.dart';
+import 'package:the_mans_house/screens/admin/barber_day_screen.dart';
 import 'package:the_mans_house/state/app_state.dart';
 import 'package:the_mans_house/theme.dart';
 
-/// Agenda da telefono: elenco, azioni rapide con lo scorrimento e blocco orari.
+/// Agenda da telefono: un riquadro per barbiere e la giornata del barbiere
+/// (arrivato, completato, pagamento, blocco orari).
 void main() {
   setUpAll(() async {
     googleFontsEnabled = false;
@@ -26,7 +29,7 @@ void main() {
     return d;
   }
 
-  Future<(AppState, DemoBackend)> pumpAgenda(WidgetTester tester) async {
+  Future<(AppState, DemoBackend)> pumpPage(WidgetTester tester, Widget Function(AppState) page) async {
     tester.view.physicalSize = const Size(375, 812);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -48,7 +51,7 @@ void main() {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          home: Scaffold(body: AgendaTab(initialDay: nextTuesday())),
+          home: Scaffold(body: page(state)),
         ),
       ),
     );
@@ -56,50 +59,68 @@ void main() {
     return (state, backend);
   }
 
-  PageController lanes(WidgetTester tester) => tester.widget<PageView>(find.byType(PageView)).controller!;
+  Future<(AppState, DemoBackend)> pumpAgenda(WidgetTester tester) =>
+      pumpPage(tester, (_) => AgendaTab(initialDay: nextTuesday()));
 
-  testWidgets('corsie: un barbiere alla volta, si cambia scorrendo o con le schede', (tester) async {
+  Future<(AppState, DemoBackend)> pumpBarberDay(WidgetTester tester) =>
+      pumpPage(tester, (s) => BarberDayScreen(barber: s.barbers.first, day: nextTuesday()));
+
+  Future<Appointment> firstOfDay(WidgetTester tester, DemoBackend backend, String barberId) async {
+    final day = nextTuesday();
+    final list = await tester.runAsync(() => backend.appointmentsBetween(day, day.add(const Duration(days: 1))));
+    return list!.where((a) => a.barberId == barberId).first;
+  }
+
+  testWidgets('agenda: un riquadro per barbiere, toccandolo si apre la sua giornata', (tester) async {
     final (state, _) = await pumpAgenda(tester);
     expect(tester.takeException(), isNull);
-    expect(lanes(tester).page, 0);
-    // la prima corsia mostra solo gli appuntamenti del primo barbiere
-    expect(find.textContaining('libero'), findsWidgets);
+    for (final b in state.barbers) {
+      expect(find.text(b.name), findsOneWidget);
+    }
+    expect(find.textContaining('PRIMO'), findsWidgets);
 
-    await tester.drag(find.byType(PageView), const Offset(-300, 0));
+    await tester.tap(find.text(state.barbers.first.name));
     await settle(tester);
-    expect(lanes(tester).page, 1);
-
-    await tester.tap(find.text(state.barbers[2].name));
-    await settle(tester);
-    expect(lanes(tester).page, 2);
+    expect(find.byType(BarberDayScreen), findsOneWidget);
+    expect(find.textContaining('incassati'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('toccando un appuntamento si apre il dettaglio con "Sposta"', (tester) async {
-    await pumpAgenda(tester);
-    final card = find.textContaining(RegExp(r'^\d\d:\d\d–\d\d:\d\d')).first;
-    await tester.ensureVisible(card);
-    await tester.tap(card);
+  testWidgets('giornata del barbiere: arrivato, completato e acconto', (tester) async {
+    final (state, backend) = await pumpBarberDay(tester);
+    final barber = state.barbers.first;
+
+    await tester.tap(find.text('Arrivato?').first);
     await settle(tester);
-    expect(find.text('Sposta appuntamento'), findsOneWidget);
-    expect(find.text('Segna come completato'), findsOneWidget);
+    var a = await firstOfDay(tester, backend, barber.id);
+    expect(a.arrivedAt, isNotNull);
+    expect(find.textContaining('Arrivato '), findsOneWidget);
+
+    await tester.tap(find.text('Completato?').first);
+    await settle(tester);
+    a = await firstOfDay(tester, backend, barber.id);
+    expect(a.status, AppointmentStatus.completed);
+    expect(find.text('COMPLETATO'), findsOneWidget);
+
+    // acconto di 5 euro: resta il resto
+    await tester.tap(find.text('Pagato?').first);
+    await settle(tester);
+    await tester.tap(find.text('Acconto'));
+    await settle(tester);
+    await tester.enterText(find.byType(TextField), '5');
+    await tester.tap(find.text('SALVA'));
+    await settle(tester);
+    a = await firstOfDay(tester, backend, barber.id);
+    expect(a.payment, PaymentStatus.deposit);
+    expect(a.amountPaid, 5);
+    expect(a.outstanding, a.price - 5);
+    expect(find.text('Resta ${fmtPriceForTest(a.price - 5)}'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('vista griglia su telefono: nessun errore di impaginazione', (tester) async {
-    await pumpAgenda(tester);
-    await tester.tap(find.byTooltip('Vista griglia'));
-    await settle(tester);
-    expect(tester.takeException(), isNull);
-    expect(find.byTooltip('Vista corsie'), findsOneWidget);
-    // filtro su un barbiere: resta una sola colonna
-    await tester.tap(find.text('Antonio').first);
-    await settle(tester);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('tenendo premuto uno spazio libero si blocca l\'orario', (tester) async {
-    await pumpAgenda(tester);
-    final gap = find.textContaining('libero').first;
+  testWidgets('giornata del barbiere: tenendo premuto uno spazio libero si blocca l\'orario', (tester) async {
+    await pumpBarberDay(tester);
+    final gap = find.textContaining('libero fino alle').first;
     await tester.ensureVisible(gap);
     await tester.longPress(gap);
     await settle(tester);
@@ -110,7 +131,22 @@ void main() {
     expect(find.text('Orario bloccato'), findsOneWidget);
     expect(find.textContaining('Pausa'), findsWidgets);
   });
+
+  testWidgets('vista griglia su telefono: nessun errore di impaginazione', (tester) async {
+    await pumpAgenda(tester);
+    await tester.tap(find.byTooltip('Vista griglia'));
+    await settle(tester);
+    expect(tester.takeException(), isNull);
+    expect(find.byTooltip('Vista barbieri'), findsOneWidget);
+    // filtro su un barbiere: resta una sola colonna
+    await tester.tap(find.text('Antonio').first);
+    await settle(tester);
+    expect(tester.takeException(), isNull);
+  });
 }
+
+/// Come fmtPrice: "€ 10" per gli importi interi.
+String fmtPriceForTest(double v) => '€ ${v.toStringAsFixed(0)}';
 
 /// Fa avanzare il tempo finto (il backend demo risponde dopo 250 ms).
 Future<void> settle(WidgetTester tester) async {

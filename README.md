@@ -16,9 +16,9 @@ Backend: **Supabase** (database, login, funzioni). Promemoria: **WhatsApp** (Met
 
 **Area riservata** (solo account amministratore)
 - Agenda con settimana in alto (numero di appuntamenti per giorno), riepilogo del giorno e filtro per barbiere (un colore per barbiere)
-  - **Corsie** (predefinita su telefono): un barbiere alla volta, si cambia scorrendo o con le schede in alto; blocchi grandi proporzionati alla durata, spazi liberi, pausa pranzo compressa, linea dell'ora attuale
+  - **Barbieri** (predefinita su telefono, colori chiari): lo schermo è diviso in un riquadro pastello per barbiere con appuntamenti, incasso, cliente in poltrona o prossimo e riempimento della giornata. Toccando un barbiere si apre la sua giornata: una scheda grande per appuntamento (orario, cliente, servizio, prezzo, note), spazi liberi e ora attuale
   - **Griglia** (predefinita su tablet/computer): una colonna per barbiere; su telefono scorre in verticale
-- Chiusura rapida: il tasto ✓ sugli appuntamenti iniziati li segna completati (con "Annulla")
+- Nella giornata del barbiere ogni appuntamento ha i pulsanti **Arrivato**, **Completato** e **Pagamento** (pagato, paga dopo, acconto con importo e resto). Il resto da incassare compare nella scheda cliente
 - Tocca un appuntamento per: promemoria WhatsApp, chiama, scheda cliente, sposta, completato, non presentato, annulla
 - Tocca uno spazio libero per inserire un appuntamento; tienilo premuto (o "+" → Blocca un orario) per bloccarlo (pausa, imprevisto...). Tocca un blocco per rimuoverlo
 - Servizi: aggiungi, modifica prezzo e durata, nascondi, elimina
@@ -50,6 +50,7 @@ flutter run -d chrome
 2. In **SQL Editor** esegui, in ordine:
    - `supabase/migrations/20261010000000_init.sql` (tabelle, sicurezza, funzioni)
    - `supabase/migrations/20261013000000_reschedule.sql` (spostamento appuntamenti)
+   - `supabase/migrations/20261013010000_visit_payment.sql` (arrivo e pagamenti)
    - `supabase/seed.sql` (servizi, 3 barbieri e orari di esempio, da modificare poi in app)
 3. Imposta l'email del titolare come amministratore:
    ```sql

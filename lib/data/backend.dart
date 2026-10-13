@@ -21,6 +21,7 @@ abstract class Backend {
 
   // --- Autenticazione ---
   Future<void> signInWithEmail(String email, String password);
+
   /// Ritorna false se serve confermare l'email prima di accedere.
   Future<bool> signUpWithEmail({
     required String email,
@@ -73,6 +74,14 @@ abstract class Backend {
   // --- Area riservata ---
   Future<List<Appointment>> appointmentsBetween(DateTime from, DateTime to);
   Future<void> setAppointmentStatus(String id, AppointmentStatus status);
+
+  /// Arrivo del cliente e pagamento (pagato, paga dopo, acconto).
+  Future<void> updateVisit(
+    String id, {
+    required DateTime? arrivedAt,
+    required PaymentStatus payment,
+    required double amountPaid,
+  });
   Future<List<CustomerSummary>> customers();
 
   /// Tutti gli appuntamenti di un cliente (scheda cliente), dal piu' recente.

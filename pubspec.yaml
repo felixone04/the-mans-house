@@ -113,11 +113,11 @@ flutter_launcher_icons:
     background_color: "#0B0B0B"
     theme_color: "#0B0B0B"
 
+# Avvio solo con lo sfondo nero: il logo lo mostra una volta sola la
+# schermata di apertura dell'app (prima compariva due volte).
 flutter_native_splash:
   color: "#0B0B0B"
-  image: assets/icon/splash.png
   android_12:
-    image: assets/icon/splash_android12.png
     color: "#0B0B0B"
-  web: true
+  web: false
   fullscreen: true

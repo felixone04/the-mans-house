@@ -6,9 +6,8 @@ import '../../models.dart';
 import '../../state/app_state.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
-import '../booking_screen.dart';
-import 'block_time_sheet.dart';
-import 'customer_screen.dart';
+import 'agenda_actions.dart';
+import 'barber_day_screen.dart';
 
 int _minuteOf(DateTime d) => d.hour * 60 + d.minute;
 
@@ -27,7 +26,7 @@ class AgendaTab extends StatefulWidget {
   State<AgendaTab> createState() => _AgendaTabState();
 }
 
-class _AgendaTabState extends State<AgendaTab> {
+class _AgendaTabState extends State<AgendaTab> with AgendaActions {
   late DateTime _day = dayOnly(widget.initialDay ?? DateTime.now());
   DateTime? _loadedWeek;
   List<Appointment> _week = []; // appuntamenti della settimana mostrata
@@ -35,8 +34,21 @@ class _AgendaTabState extends State<AgendaTab> {
   bool _loading = true;
   bool? _grid; // null: deciso in base alla larghezza dello schermo
   String? _filter; // griglia: id del barbiere mostrato, null = tutti
-  int _lane = 0; // corsie: barbiere mostrato
-  int _scrollToken = 0; // cambia quando l'elenco deve tornare all'ora attuale
+  int _scrollToken = 0; // cambia quando la griglia deve tornare all'ora attuale
+
+  @override
+  DateTime get agendaDay => _day;
+
+  @override
+  List<Appointment> get agendaDayAppointments => _dayItems;
+
+  @override
+  Future<void> reloadAgenda() => _load(silent: true);
+
+  Future<void> _openBarber(Barber b) async {
+    await Navigator.of(context).push(fadeRoute(BarberDayScreen(barber: b, day: _day)));
+    if (mounted) _load(silent: true);
+  }
 
   @override
   void initState() {
@@ -95,238 +107,6 @@ class _AgendaTabState extends State<AgendaTab> {
     if (d != null) _setDay(d);
   }
 
-  // --- Azioni ---
-
-  Future<void> _newAppointment({Barber? barber, DateTime? time}) async {
-    final created = await Navigator.of(context).push<bool>(
-      fadeRoute(BookingScreen(adminMode: true, initialDay: time ?? _day, initialBarber: barber, initialTime: time)),
-    );
-    if (created == true) _load(silent: true);
-  }
-
-  Future<void> _move(Appointment a) async {
-    final moved = await Navigator.of(context).push<bool>(fadeRoute(BookingScreen(adminMode: true, reschedule: a)));
-    if (moved == true) _load(silent: true);
-  }
-
-  Future<void> _block({Barber? barber, int? start, int? end}) async {
-    final state = AppScope.read(context);
-    final ok = await showBlockTimeSheet(
-      context,
-      day: _day,
-      barbers: state.barbers,
-      appointments: _dayItems,
-      barber: barber,
-      startMin: start,
-      endMin: end,
-    );
-    if (ok && mounted) {
-      showMessage(context, 'Orario bloccato');
-      _load(silent: true);
-    }
-  }
-
-  Future<void> _removeBlock(TimeOff t, Barber b) async {
-    final ok = await confirmDialog(
-      context,
-      title: 'Rimuovere il blocco?',
-      message:
-          '${b.name} · ${t.reason.isEmpty ? 'Assente' : t.reason}\n'
-          '${_offLabel(t)}\nL\'orario tornerà prenotabile.',
-      confirm: 'Rimuovi',
-    );
-    if (!ok || !mounted) return;
-    try {
-      await AppScope.read(context).backend.deleteTimeOff(t.id);
-      await _load(silent: true);
-    } catch (e) {
-      if (mounted) showError(context, e);
-    }
-  }
-
-  String _offLabel(TimeOff t) {
-    final allDay = !t.start.isAfter(_day) && !t.end.isBefore(_nextDay);
-    if (allDay) return 'Tutto il giorno';
-    final s = t.start.isBefore(_day) ? '00:00' : fmtTime(t.start);
-    final e = t.end.isAfter(_nextDay) ? '24:00' : fmtTime(t.end);
-    return '$s – $e';
-  }
-
-  Future<void> _setStatus(Appointment a, AppointmentStatus s) async {
-    if (s == AppointmentStatus.cancelled) {
-      final ok = await confirmDialog(
-        context,
-        title: 'Annullare l\'appuntamento?',
-        message: '${a.customerName} · ${fmtTime(a.start)} · ${a.serviceName}',
-        confirm: 'Annulla appuntamento',
-        destructive: true,
-      );
-      if (!ok || !mounted) return;
-    }
-    try {
-      await AppScope.read(context).backend.setAppointmentStatus(a.id, s);
-      await _load(silent: true);
-    } catch (e) {
-      if (mounted) showError(context, e);
-    }
-  }
-
-  /// Azione rapida (scorrimento): cambia stato con possibilita' di annullare.
-  Future<void> _quick(Appointment a, AppointmentStatus s) async {
-    final backend = AppScope.read(context).backend;
-    final previous = a.status;
-    try {
-      await backend.setAppointmentStatus(a.id, s);
-      await _load(silent: true);
-      if (!mounted) return;
-      showMessage(
-        context,
-        '${a.customerName.isEmpty ? 'Cliente' : a.customerName}: ${statusLabel(s).toLowerCase()}',
-        actionLabel: 'Annulla',
-        onAction: () async {
-          try {
-            await backend.setAppointmentStatus(a.id, previous);
-            if (mounted) await _load(silent: true);
-          } catch (e) {
-            if (mounted) showError(context, e);
-          }
-        },
-      );
-    } catch (e) {
-      if (mounted) showError(context, e);
-    }
-  }
-
-  void _whatsApp(Appointment a) {
-    final shop = AppScope.read(context).settings.name;
-    final text =
-        'Ciao ${a.customerName.split(' ').first}, ti ricordiamo l\'appuntamento da $shop '
-        '${fmtDayLong(a.start).toLowerCase()} alle ${fmtTime(a.start)}'
-        '${a.barberName.isEmpty ? '' : ' con ${a.barberName}'} (${a.serviceName}). A presto!';
-    openWhatsApp(context, a.customerPhone, text);
-  }
-
-  void _openCustomer(Appointment a) {
-    final c = CustomerSummary(
-      id: a.userId ?? '${CustomerSummary.walkInPrefix}${a.customerName}',
-      email: '',
-      fullName: a.customerName,
-      phone: a.customerPhone,
-      bookings: 0,
-    );
-    Navigator.of(context).push(fadeRoute(CustomerScreen(customer: c))).then((_) => _load(silent: true));
-  }
-
-  void _openAppointment(Appointment a) {
-    showModalBottomSheet<void>(
-      context: context,
-      constraints: const BoxConstraints(maxWidth: 520),
-      // su schermi bassi (es. 360x640) il contenuto superava l'altezza massima
-      // predefinita del foglio (9/16 dello schermo): ora si adatta e scorre
-      isScrollControlled: true,
-      builder: (c) {
-        void act(VoidCallback fn) {
-          Navigator.pop(c);
-          fn();
-        }
-
-        return SafeArea(
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          a.customerName.isEmpty ? 'Cliente' : a.customerName,
-                          style: slab(size: 20, weight: FontWeight.w600, spacing: 0.4),
-                        ),
-                      ),
-                      StatusBadge(a.status),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${fmtTime(a.start)} – ${fmtTime(a.end)} · ${a.serviceName} · ${fmtPrice(a.price)}',
-                    style: const TextStyle(color: AppColors.silver),
-                  ),
-                  Text('con ${a.barberName}', style: const TextStyle(color: AppColors.silver)),
-                  if (a.customerPhone.isNotEmpty) Text(a.customerPhone, style: const TextStyle(color: AppColors.muted)),
-                  if (a.notes.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      '“${a.notes}”',
-                      style: const TextStyle(color: AppColors.silver, fontStyle: FontStyle.italic),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  if (a.customerPhone.isNotEmpty)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => act(() => _whatsApp(a)),
-                            icon: const Icon(Icons.chat_outlined, size: 18),
-                            label: const Text('Promemoria'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => act(() => callPhone(context, a.customerPhone)),
-                            icon: const Icon(Icons.call_outlined, size: 18),
-                            label: const Text('Chiama'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  const SizedBox(height: 8),
-                  if (a.customerName.isNotEmpty)
-                    ListTile(
-                      leading: const Icon(Icons.person_search_outlined),
-                      title: const Text('Scheda cliente'),
-                      onTap: () => act(() => _openCustomer(a)),
-                    ),
-                  if (a.status == AppointmentStatus.confirmed) ...[
-                    ListTile(
-                      leading: const Icon(Icons.edit_calendar_outlined),
-                      title: const Text('Sposta appuntamento'),
-                      onTap: () => act(() => _move(a)),
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.done_all),
-                      title: const Text('Segna come completato'),
-                      onTap: () => act(() => _setStatus(a, AppointmentStatus.completed)),
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.person_off_outlined),
-                      title: const Text('Non presentato'),
-                      onTap: () => act(() => _setStatus(a, AppointmentStatus.noShow)),
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.close, color: AppColors.danger),
-                      title: const Text('Annulla appuntamento', style: TextStyle(color: AppColors.danger)),
-                      onTap: () => act(() => _setStatus(a, AppointmentStatus.cancelled)),
-                    ),
-                  ] else if (a.status != AppointmentStatus.cancelled)
-                    ListTile(
-                      leading: const Icon(Icons.undo),
-                      title: const Text('Ripristina come confermato'),
-                      onTap: () => act(() => _setStatus(a, AppointmentStatus.confirmed)),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   /// Fascia oraria della griglia: orari dei barbieri + eventuali appuntamenti fuori orario.
   (int, int) _range(List<Barber> barbers, List<Appointment> items) {
     var start = 24 * 60, end = 0;
@@ -351,85 +131,92 @@ class _AgendaTabState extends State<AgendaTab> {
     final state = AppScope.of(context);
     final barbers = state.barbers;
     _grid ??= MediaQuery.sizeOf(context).width >= 700;
+    final grid = _grid!;
     if (_filter != null && !barbers.any((b) => b.id == _filter)) _filter = null;
-    if (_lane >= barbers.length) _lane = 0;
-    // corsie: si vede un barbiere alla volta; griglia: filtro facoltativo
-    final laneBarber = barbers.isEmpty ? null : barbers[_lane];
-    final filter = _grid! ? _filter : laneBarber?.id;
     final shown = _filter == null ? barbers : barbers.where((b) => b.id == _filter).toList();
     final shownIds = shown.map((b) => b.id).toSet();
     final active = _dayItems.where((a) => a.status != AppointmentStatus.cancelled).toList();
     final dayAppts = active.where((a) => shownIds.contains(a.barberId)).toList();
 
+    final header = ResponsiveCenter(
+      maxWidth: 1200,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: _AgendaHeader(
+        day: _day,
+        weekStart: _weekStart,
+        week: _week,
+        barbers: barbers,
+        filter: grid ? _filter : null,
+        grid: grid,
+        light: !grid,
+        onDay: _setDay,
+        onPickDay: _pickDay,
+        onFilter: (id) => setState(() => _filter = id),
+        onToggleView: () => setState(() {
+          _grid = !grid;
+          _scrollToken++;
+        }),
+        onNew: () => newAppointment(),
+        onBlock: () => blockTime(barber: grid && shown.length == 1 ? shown.first : null),
+      ),
+    );
+
+    final Widget body;
+    if (_loading) {
+      body = Center(child: CircularProgressIndicator(color: grid ? null : AgendaLight.ink));
+    } else if (barbers.isEmpty) {
+      body = const EmptyState(icon: Icons.badge_outlined, text: 'Aggiungi i barbieri dalla sezione Barbieri');
+    } else if (grid) {
+      body = LayoutBuilder(
+        builder: (context, c) {
+          final range = _range(shown, dayAppts);
+          final usable = c.maxHeight - _DayCalendar.headerH - 1 - 2 * _DayCalendar.topPad;
+          // almeno 1,3 px al minuto: su telefono la griglia scorre
+          // in verticale invece di schiacciare gli appuntamenti
+          final fit = usable / (range.$2 - range.$1);
+          return _DayCalendar(
+            key: ValueKey('grid$_scrollToken'),
+            ppm: fit < 1.3 ? 1.3 : fit,
+            day: _day,
+            barbers: shown,
+            allBarbers: barbers,
+            appointments: dayAppts,
+            timeOff: _dayOff,
+            range: range,
+            onTapAppointment: openAppointment,
+            onTapEmpty: (b, t) => newAppointment(barber: b, time: t),
+            onLongPressEmpty: (b, m) => blockTime(barber: b, start: m, end: m + 30),
+            onTapTimeOff: removeBlock,
+          );
+        },
+      );
+    } else {
+      body = _BarberPanels(day: _day, barbers: barbers, appointments: active, timeOff: _dayOff, onOpen: _openBarber);
+    }
+
+    // telefono: agenda su fondo chiaro, a foglio
+    if (!grid) {
+      return Container(
+        margin: const EdgeInsets.only(top: 4),
+        decoration: const BoxDecoration(
+          color: AgendaLight.paper,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 6),
+            header,
+            Expanded(child: body),
+          ],
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Column(
         children: [
-          ResponsiveCenter(
-            maxWidth: 1200,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: _AgendaHeader(
-              day: _day,
-              weekStart: _weekStart,
-              week: _week,
-              barbers: barbers,
-              filter: filter,
-              grid: _grid!,
-              onDay: _setDay,
-              onPickDay: _pickDay,
-              onFilter: (id) => setState(() => _filter = id),
-              onToggleView: () => setState(() {
-                _grid = !_grid!;
-                _scrollToken++;
-              }),
-              onNew: () => _newAppointment(),
-              onBlock: () => _block(barber: _grid! ? (shown.length == 1 ? shown.first : null) : laneBarber),
-            ),
-          ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : barbers.isEmpty
-                ? const EmptyState(icon: Icons.badge_outlined, text: 'Aggiungi i barbieri dalla sezione Barbieri')
-                : _grid!
-                ? LayoutBuilder(
-                    builder: (context, c) {
-                      final range = _range(shown, dayAppts);
-                      final usable = c.maxHeight - _DayCalendar.headerH - 1 - 2 * _DayCalendar.topPad;
-                      // almeno 1,3 px al minuto: su telefono la griglia scorre
-                      // in verticale invece di schiacciare gli appuntamenti
-                      final fit = usable / (range.$2 - range.$1);
-                      return _DayCalendar(
-                        key: ValueKey('grid$_scrollToken'),
-                        ppm: fit < 1.3 ? 1.3 : fit,
-                        day: _day,
-                        barbers: shown,
-                        allBarbers: barbers,
-                        appointments: dayAppts,
-                        timeOff: _dayOff,
-                        range: range,
-                        onTapAppointment: _openAppointment,
-                        onTapEmpty: (b, t) => _newAppointment(barber: b, time: t),
-                        onLongPressEmpty: (b, m) => _block(barber: b, start: m, end: m + 30),
-                        onTapTimeOff: _removeBlock,
-                      );
-                    },
-                  )
-                : _LaneView(
-                    key: ValueKey('lanes$_scrollToken'),
-                    day: _day,
-                    barbers: barbers,
-                    index: _lane,
-                    onIndex: (i) => setState(() => _lane = i),
-                    appointments: active,
-                    timeOff: _dayOff,
-                    onTapAppointment: _openAppointment,
-                    onDone: (a) => _quick(a, AppointmentStatus.completed),
-                    onTapEmpty: (b, t) => _newAppointment(barber: b, time: t),
-                    onLongPressEmpty: (b, s, e) => _block(barber: b, start: s, end: e),
-                    onTapTimeOff: _removeBlock,
-                  ),
-          ),
+          header,
+          Expanded(child: body),
         ],
       ),
     );
@@ -448,6 +235,7 @@ class _AgendaHeader extends StatelessWidget {
     required this.barbers,
     required this.filter,
     required this.grid,
+    this.light = false,
     required this.onDay,
     required this.onPickDay,
     required this.onFilter,
@@ -462,6 +250,9 @@ class _AgendaHeader extends StatelessWidget {
   final List<Barber> barbers;
   final String? filter;
   final bool grid;
+
+  /// Colori chiari (agenda da telefono).
+  final bool light;
   final ValueChanged<DateTime> onDay;
   final VoidCallback onPickDay;
   final ValueChanged<String?> onFilter;
@@ -485,6 +276,7 @@ class _AgendaHeader extends StatelessWidget {
               .firstOrNull
         : null;
     const compact = VisualDensity(horizontal: -2, vertical: -2);
+    final ink = light ? AgendaLight.ink : AppColors.white;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -495,7 +287,7 @@ class _AgendaHeader extends StatelessWidget {
               visualDensity: compact,
               tooltip: 'Settimana precedente',
               onPressed: () => onDay(DateTime(day.year, day.month, day.day - 7)),
-              icon: const Icon(Icons.chevron_left),
+              icon: Icon(Icons.chevron_left, color: ink),
             ),
             Expanded(
               child: InkWell(
@@ -510,7 +302,7 @@ class _AgendaHeader extends StatelessWidget {
                       children: [
                         Text(
                           capitalize(DateFormat('MMMM yyyy', 'it_IT').format(day)),
-                          style: slab(size: 16, weight: FontWeight.w600, spacing: 0.5),
+                          style: slab(size: 16, weight: FontWeight.w600, spacing: 0.5, color: ink),
                         ),
                         const SizedBox(width: 6),
                         const Icon(Icons.expand_more, size: 18, color: AppColors.muted),
@@ -524,19 +316,23 @@ class _AgendaHeader extends StatelessWidget {
               visualDensity: compact,
               tooltip: 'Settimana successiva',
               onPressed: () => onDay(DateTime(day.year, day.month, day.day + 7)),
-              icon: const Icon(Icons.chevron_right),
+              icon: Icon(Icons.chevron_right, color: ink),
             ),
             if (day != today)
               TextButton(
-                style: TextButton.styleFrom(visualDensity: compact, padding: const EdgeInsets.symmetric(horizontal: 8)),
+                style: TextButton.styleFrom(
+                  visualDensity: compact,
+                  foregroundColor: light ? AgendaLight.ink : null,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
                 onPressed: () => onDay(today),
                 child: const Text('Oggi'),
               ),
             IconButton(
               visualDensity: compact,
-              tooltip: grid ? 'Vista corsie' : 'Vista griglia',
+              tooltip: grid ? 'Vista barbieri' : 'Vista griglia',
               onPressed: onToggleView,
-              icon: Icon(grid ? Icons.view_day_outlined : Icons.view_week_outlined, size: 21),
+              icon: Icon(grid ? Icons.view_agenda_outlined : Icons.view_week_outlined, size: 21, color: ink),
             ),
             PopupMenuButton<int>(
               tooltip: 'Aggiungi',
@@ -567,8 +363,8 @@ class _AgendaHeader extends StatelessWidget {
                 width: 38,
                 height: 38,
                 margin: const EdgeInsets.only(left: 4),
-                decoration: const BoxDecoration(color: AppColors.white, shape: BoxShape.circle),
-                child: const Icon(Icons.add, color: AppColors.black),
+                decoration: BoxDecoration(color: light ? AgendaLight.ink : AppColors.white, shape: BoxShape.circle),
+                child: Icon(Icons.add, color: light ? Colors.white : AppColors.black),
               ),
             ),
           ],
@@ -584,6 +380,7 @@ class _AgendaHeader extends StatelessWidget {
                   selected: days[i] == day,
                   today: days[i] == today,
                   count: week.where((a) => dayOnly(a.start) == days[i] && _counts(a)).length,
+                  light: light,
                   open: barbers.any(
                     (b) => (filter == null || b.id == filter) && b.hoursFor(days[i].weekday).isNotEmpty,
                   ),
@@ -603,7 +400,7 @@ class _AgendaHeader extends StatelessWidget {
           ].join(' · '),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: AppColors.silver, fontSize: 12.5),
+          style: TextStyle(color: light ? AgendaLight.sub : AppColors.silver, fontSize: 12.5),
         ),
         // filtro solo in griglia: nelle corsie si sceglie il barbiere dalle schede
         if (grid && barbers.length > 1) ...[
@@ -639,6 +436,7 @@ class _WeekDay extends StatelessWidget {
     required this.count,
     required this.open,
     required this.onTap,
+    this.light = false,
   });
   final DateTime day;
   final bool selected;
@@ -646,26 +444,37 @@ class _WeekDay extends StatelessWidget {
   final int count;
   final bool open;
   final VoidCallback onTap;
+  final bool light;
 
   @override
   Widget build(BuildContext context) {
-    final fg = selected ? AppColors.black : (open ? AppColors.white : AppColors.muted);
+    // scuro: tessera avorio quando scelta; chiaro: tessera nera quando scelta
+    final Color fg, bg, border, sub;
+    if (light) {
+      fg = selected ? Colors.white : (open ? AgendaLight.ink : AgendaLight.muted);
+      bg = selected ? AgendaLight.ink : (open ? AgendaLight.card : Colors.transparent);
+      border = selected ? AgendaLight.ink : (today ? AgendaLight.now : AgendaLight.line);
+      sub = selected ? const Color(0xFFCFCFCF) : AgendaLight.sub;
+    } else {
+      fg = selected ? AppColors.black : (open ? AppColors.white : AppColors.muted);
+      bg = selected ? AppColors.white : Colors.white.withValues(alpha: open ? 0.05 : 0.015);
+      border = selected
+          ? AppColors.white
+          : today
+          ? AppColors.silver.withValues(alpha: 0.7)
+          : Colors.white.withValues(alpha: 0.08);
+      sub = selected ? const Color(0xFF555555) : AppColors.silver;
+    }
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(10),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? AppColors.white : Colors.white.withValues(alpha: open ? 0.05 : 0.015),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: selected
-                ? AppColors.white
-                : today
-                ? AppColors.silver.withValues(alpha: 0.7)
-                : Colors.white.withValues(alpha: 0.08),
-          ),
+          color: bg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: border, width: today && !selected ? 1.5 : 1),
         ),
         child: Column(
           children: [
@@ -683,11 +492,7 @@ class _WeekDay extends StatelessWidget {
                   ? null
                   : Text(
                       '$count',
-                      style: TextStyle(
-                        color: selected ? const Color(0xFF555555) : AppColors.silver,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: TextStyle(color: sub, fontSize: 11, fontWeight: FontWeight.w700),
                     ),
             ),
           ],
@@ -751,788 +556,263 @@ class _FilterChip extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Vista corsie (telefono): un barbiere alla volta, si cambia scorrendo
+// Vista barbieri (telefono): lo schermo diviso in un riquadro per barbiere
 // ---------------------------------------------------------------------------
 
-/// Spazi liberi di un barbiere nel giorno (minuti dalla mezzanotte), almeno
-/// [minGap] minuti. Oggi si parte dall'ora attuale; i giorni passati non ne hanno.
-List<(int, int)> _freeRanges(
-  DateTime day,
-  Barber b,
-  List<Appointment> appointments,
-  List<TimeOff> off, {
-  int minGap = 15,
-}) {
-  final now = DateTime.now();
-  final today = dayOnly(now);
-  if (day.isBefore(today)) return [];
-  final from = day == today ? ((_minuteOf(now) + 4) ~/ 5) * 5 : 0;
-  final busy = <(int, int)>[
-    for (final a in appointments.where((a) => a.barberId == b.id))
-      (_minuteOf(a.start), _minuteOf(a.start) + a.end.difference(a.start).inMinutes),
-    for (final t in off) _offRange(day, t),
-  ]..sort((x, y) => x.$1.compareTo(y.$1));
-  final result = <(int, int)>[];
-  void add(int s, int e) {
-    if (s < from) s = from;
-    if (e - s >= minGap) result.add((s, e));
-  }
-
-  for (final h in b.hoursFor(day.weekday)) {
-    var cur = h.start;
-    for (final (s, e) in busy) {
-      if (e <= cur) continue;
-      if (s >= h.end) break;
-      if (s > cur) add(cur, s);
-      cur = e;
-    }
-    if (cur < h.end) add(cur, h.end);
-  }
-  return result;
-}
-
-/// Parte di un'assenza che cade nel giorno, in minuti.
-(int, int) _offRange(DateTime day, TimeOff t) {
-  final next = DateTime(day.year, day.month, day.day + 1);
-  return (t.start.isAfter(day) ? _minuteOf(t.start) : 0, t.end.isBefore(next) ? _minuteOf(t.end) : 24 * 60);
-}
-
-class _LaneView extends StatefulWidget {
-  const _LaneView({
-    super.key,
+class _BarberPanels extends StatelessWidget {
+  const _BarberPanels({
     required this.day,
     required this.barbers,
-    required this.index,
-    required this.onIndex,
     required this.appointments,
     required this.timeOff,
-    required this.onTapAppointment,
-    required this.onDone,
-    required this.onTapEmpty,
-    required this.onLongPressEmpty,
-    required this.onTapTimeOff,
+    required this.onOpen,
   });
-
   final DateTime day;
   final List<Barber> barbers;
-  final int index;
-  final ValueChanged<int> onIndex;
-  final List<Appointment> appointments; // del giorno, tutti i barbieri (senza annullati)
+  final List<Appointment> appointments; // del giorno, senza annullati
   final Map<String, List<TimeOff>> timeOff;
-  final ValueChanged<Appointment> onTapAppointment;
-  final ValueChanged<Appointment> onDone;
-  final void Function(Barber, DateTime) onTapEmpty;
-  final void Function(Barber, int, int) onLongPressEmpty;
-  final void Function(TimeOff, Barber) onTapTimeOff;
+  final ValueChanged<Barber> onOpen;
+
+  static const _gap = 10.0;
+  static const _minH = 150.0;
 
   @override
-  State<_LaneView> createState() => _LaneViewState();
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, c) {
+      // i riquadri si dividono lo schermo; se sono tanti, la pagina scorre
+      final avail = c.maxHeight - 24 - _gap * (barbers.length - 1);
+      final h = (avail / barbers.length).clamp(_minH, 260.0);
+      return SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(0, 6, 0, 18),
+        child: ResponsiveCenter(
+          maxWidth: 720,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Column(
+            children: [
+              for (var i = 0; i < barbers.length; i++) ...[
+                if (i > 0) const SizedBox(height: _gap),
+                SizedBox(
+                  height: h,
+                  child: _BarberPanel(
+                    day: day,
+                    barber: barbers[i],
+                    tone: barberTone(barbers, barbers[i].id),
+                    appointments: appointments.where((a) => a.barberId == barbers[i].id).toList()
+                      ..sort((x, y) => x.start.compareTo(y.start)),
+                    timeOff: timeOff[barbers[i].id] ?? const [],
+                    onTap: () => onOpen(barbers[i]),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }
 
-class _LaneViewState extends State<_LaneView> {
-  late final _pages = PageController(initialPage: widget.index);
-
-  @override
-  void didUpdateWidget(covariant _LaneView old) {
-    super.didUpdateWidget(old);
-    if (_pages.hasClients && (_pages.page?.round() ?? widget.index) != widget.index) {
-      _pages.jumpToPage(widget.index);
-    }
-  }
-
-  @override
-  void dispose() {
-    _pages.dispose();
-    super.dispose();
-  }
+class _BarberPanel extends StatelessWidget {
+  const _BarberPanel({
+    required this.day,
+    required this.barber,
+    required this.tone,
+    required this.appointments,
+    required this.timeOff,
+    required this.onTap,
+  });
+  final DateTime day;
+  final Barber barber;
+  final BarberTone tone;
+  final List<Appointment> appointments;
+  final List<TimeOff> timeOff;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final w = widget;
-    return Column(
-      children: [
-        if (w.barbers.length > 1)
-          ResponsiveCenter(
-            maxWidth: 720,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: _LaneTabs(
-              barbers: w.barbers,
-              day: w.day,
-              index: w.index,
-              appointments: w.appointments,
-              onTap: (i) =>
-                  _pages.animateToPage(i, duration: const Duration(milliseconds: 280), curve: Curves.easeOutCubic),
-            ),
+    final now = DateTime.now();
+    final isToday = day == dayOnly(now);
+    final hours = barber.hoursFor(day.weekday);
+    final kept = appointments.where((a) => a.status != AppointmentStatus.noShow).toList();
+    final total = kept.fold<double>(0, (s, a) => s + a.price);
+    final running = isToday
+        ? appointments
+              .where((a) => !a.start.isAfter(now) && a.end.isAfter(now) && a.status != AppointmentStatus.noShow)
+              .firstOrNull
+        : null;
+    final upcoming = appointments
+        .where((a) => a.status == AppointmentStatus.confirmed && (!isToday || a.start.isAfter(now)))
+        .toList();
+    final next = upcoming.firstOrNull;
+    final toPay = appointments.where((a) => a.outstanding > 0).length;
+
+    // riempimento della giornata (minuti prenotati / minuti di lavoro)
+    final workMin = hours.fold<int>(0, (s, h) => s + h.end - h.start);
+    final bookedMin = kept.fold<int>(0, (s, a) => s + a.end.difference(a.start).inMinutes);
+    final fill = workMin == 0 ? 0.0 : (bookedMin / workMin).clamp(0.0, 1.0);
+
+    Widget focus;
+    if (hours.isEmpty && appointments.isEmpty) {
+      focus = Text(
+        'Riposo oggi',
+        style: TextStyle(color: tone.mid, fontSize: 17, fontWeight: FontWeight.w700),
+      );
+    } else if (running != null) {
+      focus = _Focus(label: 'IN POLTRONA', appointment: running, tone: tone, live: true);
+    } else if (next != null) {
+      focus = _Focus(label: isToday ? 'PROSSIMO' : 'PRIMO', appointment: next, tone: tone);
+    } else {
+      focus = Text(
+        appointments.isEmpty ? 'Nessun appuntamento' : 'Giornata finita',
+        style: TextStyle(color: tone.mid, fontSize: 17, fontWeight: FontWeight.w700),
+      );
+    }
+
+    return Material(
+      color: tone.bg,
+      borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 19,
+                    backgroundColor: tone.accent,
+                    child: Text(
+                      barber.initials,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          barber.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: tone.ink, fontSize: 20, fontWeight: FontWeight.w800, height: 1.1),
+                        ),
+                        Text(
+                          [
+                            '${kept.length} ${kept.length == 1 ? 'appuntamento' : 'appuntamenti'}',
+                            fmtPrice(total),
+                            if (toPay > 0) '$toPay da incassare',
+                          ].join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: tone.mid, fontSize: 12.5, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right, color: tone.ink, size: 28),
+                ],
+              ),
+              const Spacer(),
+              focus,
+              const Spacer(),
+              if (workMin > 0)
+                Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: fill,
+                          minHeight: 7,
+                          color: tone.accent,
+                          backgroundColor: Colors.white.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      'pieno ${(fill * 100).round()}%',
+                      style: TextStyle(color: tone.mid, fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+            ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Appuntamento in evidenza nel riquadro: orario grande, cliente, servizio.
+class _Focus extends StatelessWidget {
+  const _Focus({required this.label, required this.appointment, required this.tone, this.live = false});
+  final String label;
+  final Appointment appointment;
+  final BarberTone tone;
+  final bool live;
+
+  @override
+  Widget build(BuildContext context) {
+    final a = appointment;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: live ? tone.accent : Colors.white.withValues(alpha: 0.8),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: live ? Colors.white : tone.mid,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.6,
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              fmtTime(a.start),
+              style: TextStyle(color: tone.ink, fontSize: 28, height: 1.1, fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+        const SizedBox(width: 14),
         Expanded(
-          child: PageView.builder(
-            controller: _pages,
-            itemCount: w.barbers.length,
-            onPageChanged: w.onIndex,
-            itemBuilder: (context, i) {
-              final b = w.barbers[i];
-              return _Lane(
-                day: w.day,
-                barber: b,
-                color: barberColor(w.barbers, b.id),
-                appointments: w.appointments.where((a) => a.barberId == b.id).toList()
-                  ..sort((x, y) => x.start.compareTo(y.start)),
-                timeOff: w.timeOff[b.id] ?? const [],
-                onTapAppointment: w.onTapAppointment,
-                onDone: w.onDone,
-                onTapEmpty: (t) => w.onTapEmpty(b, t),
-                onLongPressEmpty: (s, e) => w.onLongPressEmpty(b, s, e),
-                onTapTimeOff: (t) => w.onTapTimeOff(t, b),
-              );
-            },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                a.customerName.isEmpty ? 'Cliente' : a.customerName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: tone.ink, fontSize: 17, fontWeight: FontWeight.w800),
+              ),
+              Text(
+                '${a.serviceName} · fino alle ${fmtTime(a.end)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: tone.mid, fontSize: 13.5, fontWeight: FontWeight.w600),
+              ),
+            ],
           ),
         ),
       ],
     );
   }
-}
-
-/// Schede dei barbieri sopra le corsie: nome, numero di appuntamenti, colore.
-class _LaneTabs extends StatelessWidget {
-  const _LaneTabs({
-    required this.barbers,
-    required this.day,
-    required this.index,
-    required this.appointments,
-    required this.onTap,
-  });
-  final List<Barber> barbers;
-  final DateTime day;
-  final int index;
-  final List<Appointment> appointments;
-  final ValueChanged<int> onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget tab(int i) {
-      final b = barbers[i];
-      final selected = i == index;
-      final color = barberColor(barbers, b.id);
-      final count = appointments.where((a) => a.barberId == b.id).length;
-      final resting = b.hoursFor(day.weekday).isEmpty;
-      return InkWell(
-        onTap: () => onTap(i),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: selected ? color : AppColors.quietBorder, width: selected ? 3 : 1),
-            ),
-          ),
-          child: Column(
-            children: [
-              Text(
-                b.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: selected ? AppColors.white : AppColors.muted,
-                ),
-              ),
-              Text(
-                resting && count == 0 ? 'riposo' : '$count ${count == 1 ? 'appuntamento' : 'appuntamenti'}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11, color: selected ? AppColors.silver : AppColors.muted),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (barbers.length <= 4) {
-      return Row(children: [for (var i = 0; i < barbers.length; i++) Expanded(child: tab(i))]);
-    }
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(children: [for (var i = 0; i < barbers.length; i++) SizedBox(width: 104, child: tab(i))]),
-    );
-  }
-}
-
-/// Corsia di un barbiere: orari in verticale, blocchi proporzionati alla durata.
-class _Lane extends StatefulWidget {
-  const _Lane({
-    required this.day,
-    required this.barber,
-    required this.color,
-    required this.appointments,
-    required this.timeOff,
-    required this.onTapAppointment,
-    required this.onDone,
-    required this.onTapEmpty,
-    required this.onLongPressEmpty,
-    required this.onTapTimeOff,
-  });
-
-  /// Pixel per minuto: mezz'ora = 54 px, leggibile anche per i servizi brevi.
-  static const ppm = 1.8;
-  static const gutter = 50.0;
-  static const topPad = 12.0;
-  static const minBlock = 30.0;
-
-  final DateTime day;
-  final Barber barber;
-  final Color color;
-  final List<Appointment> appointments;
-  final List<TimeOff> timeOff;
-  final ValueChanged<Appointment> onTapAppointment;
-  final ValueChanged<Appointment> onDone;
-  final ValueChanged<DateTime> onTapEmpty;
-  final void Function(int, int) onLongPressEmpty;
-  final ValueChanged<TimeOff> onTapTimeOff;
-
-  @override
-  State<_Lane> createState() => _LaneState();
-}
-
-class _LaneState extends State<_Lane> {
-  final _scroll = ScrollController();
-
-  (int, int) get _range {
-    var start = 24 * 60, end = 0;
-    for (final h in widget.barber.hoursFor(widget.day.weekday)) {
-      if (h.start < start) start = h.start;
-      if (h.end > end) end = h.end;
-    }
-    for (final a in widget.appointments) {
-      final s = _minuteOf(a.start);
-      final e = s + a.end.difference(a.start).inMinutes;
-      if (s < start) start = s;
-      if (e > end) end = e;
-    }
-    if (end <= start) return (9 * 60, 20 * 60);
-    return ((start ~/ 60) * 60, ((end + 59) ~/ 60) * 60);
-  }
-
-  /// Altezza delle pause tra due fasce di lavoro (es. pranzo), compresse
-  /// per non riempire lo schermo di vuoto.
-  static const _breakH = 34.0;
-
-  /// Tratti della giornata: (inizio, fine, compresso).
-  List<(int, int, bool)> _segments = const [];
-
-  List<(int, int, bool)> _computeSegments((int, int) range) {
-    final hours = widget.barber.hoursFor(widget.day.weekday);
-    final segs = <(int, int, bool)>[];
-    var cur = range.$1;
-    for (var i = 0; i + 1 < hours.length; i++) {
-      final s = hours[i].end, e = hours[i + 1].start;
-      bool overlaps(int a, int b) => a < e && b > s;
-      final busy =
-          widget.appointments.any(
-            (a) => overlaps(_minuteOf(a.start), _minuteOf(a.start) + a.end.difference(a.start).inMinutes),
-          ) ||
-          widget.timeOff.any((t) {
-            final (a, b) = _offRange(widget.day, t);
-            return overlaps(a, b) && !(a <= range.$1 && b >= range.$2);
-          });
-      if (e - s >= 60 && !busy) {
-        segs
-          ..add((cur, s, false))
-          ..add((s, e, true));
-        cur = e;
-      }
-    }
-    segs.add((cur, range.$2, false));
-    return segs;
-  }
-
-  double _y(int minute) {
-    var y = _Lane.topPad;
-    for (final (s, e, compressed) in _segments) {
-      final len = compressed ? _breakH : (e - s) * _Lane.ppm;
-      if (minute >= e) {
-        y += len;
-      } else {
-        if (minute > s) y += len * (minute - s) / (e - s);
-        break;
-      }
-    }
-    return y;
-  }
-
-  int _minuteAt(double dy) {
-    var y = _Lane.topPad;
-    for (final (s, e, compressed) in _segments) {
-      final len = compressed ? _breakH : (e - s) * _Lane.ppm;
-      if (dy < y + len) return s + ((dy - y) / len * (e - s)).floor();
-      y += len;
-    }
-    return _segments.isEmpty ? 0 : _segments.last.$2;
-  }
-
-  bool _inBreak(int m) => _segments.any((g) => g.$3 && m > g.$1 && m < g.$2);
-
-  @override
-  void initState() {
-    super.initState();
-    // oggi parte dall'ora attuale, gli altri giorni dal primo appuntamento
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scroll.hasClients) return;
-      final now = DateTime.now();
-      final int target;
-      if (dayOnly(now) == widget.day) {
-        target = _minuteOf(now) - 45;
-      } else if (widget.appointments.isNotEmpty) {
-        target = _minuteOf(widget.appointments.first.start) - 15;
-      } else {
-        return;
-      }
-      _scroll.jumpTo((_y(target) - _Lane.topPad).clamp(0.0, _scroll.position.maxScrollExtent));
-    });
-  }
-
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  /// Altezza del blocco: proporzionale, ma almeno [minBlock] e senza coprire il successivo.
-  double _blockHeight(int i) {
-    final list = widget.appointments;
-    final a = list[i];
-    final top = _y(_minuteOf(a.start)) + 1;
-    var h = a.end.difference(a.start).inMinutes * _Lane.ppm - 3;
-    if (h < _Lane.minBlock) h = _Lane.minBlock;
-    if (i + 1 < list.length) {
-      final room = _y(_minuteOf(list[i + 1].start)) - top - 2;
-      if (room >= 18 && h > room) h = room;
-    }
-    return h;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final w = widget;
-    final b = w.barber;
-    final hours = b.hoursFor(w.day.weekday);
-    if (hours.isEmpty && w.appointments.isEmpty && w.timeOff.isEmpty) {
-      return EmptyState(icon: Icons.weekend_outlined, text: '${b.name} oggi è di riposo');
-    }
-    final range = _range;
-    _segments = _computeSegments(range);
-    final height = _y(range.$2) + _Lane.topPad;
-    final isToday = dayOnly(DateTime.now()) == w.day;
-    const gutter = _Lane.gutter;
-    int minuteAt(double dy) => _minuteAt(dy);
-    bool works(int m) => hours.any((h) => m >= h.start && m < h.end);
-
-    return SingleChildScrollView(
-      controller: _scroll,
-      padding: const EdgeInsets.only(bottom: 24),
-      child: ResponsiveCenter(
-        maxWidth: 720,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: SizedBox(
-          height: height,
-          child: Stack(
-            children: [
-              // tocco su un orario libero: prenota; tenendo premuto: blocca
-              Positioned.fill(
-                left: gutter,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onTapUp: (d) {
-                    final m = (minuteAt(d.localPosition.dy) ~/ 15) * 15;
-                    if (works(m)) w.onTapEmpty(DateTime(w.day.year, w.day.month, w.day.day, 0, m));
-                  },
-                  onLongPressStart: (d) {
-                    final m = (minuteAt(d.localPosition.dy) ~/ 15) * 15;
-                    if (works(m)) w.onLongPressEmpty(m, m + 30);
-                  },
-                ),
-              ),
-              // fasce di lavoro
-              for (final h in hours)
-                Positioned(
-                  top: _y(h.start),
-                  height: _y(h.end) - _y(h.start),
-                  left: gutter,
-                  right: 0,
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.025),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-              // pause compresse (es. pranzo)
-              for (final (s, e, compressed) in _segments)
-                if (compressed)
-                  Positioned(
-                    top: _y(s) + 3,
-                    height: _breakH - 6,
-                    left: gutter,
-                    right: 0,
-                    child: IgnorePointer(
-                      child: Container(
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.35),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          'pausa ${formatTime(s)} – ${formatTime(e)}',
-                          style: const TextStyle(color: AppColors.muted, fontSize: 12, letterSpacing: 0.5),
-                        ),
-                      ),
-                    ),
-                  ),
-              // linee e orari
-              for (var m = range.$1; m <= range.$2; m += 30)
-                if (!_inBreak(m))
-                  Positioned(
-                    top: _y(m),
-                    left: m % 60 == 0 ? gutter - 6 : gutter,
-                    right: 0,
-                    child: IgnorePointer(
-                      child: Container(height: 1, color: Colors.white.withValues(alpha: m % 60 == 0 ? 0.09 : 0.035)),
-                    ),
-                  ),
-              for (var m = range.$1; m < range.$2; m += 30)
-                if (!_inBreak(m))
-                  Positioned(
-                    top: _y(m) - 8,
-                    left: 0,
-                    width: gutter - 12,
-                    child: Text(
-                      formatTime(m),
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        color: m % 60 == 0 ? AppColors.silver : AppColors.muted.withValues(alpha: 0.6),
-                        fontSize: m % 60 == 0 ? 12.5 : 10.5,
-                        fontWeight: m % 60 == 0 ? FontWeight.w700 : FontWeight.w500,
-                      ),
-                    ),
-                  ),
-              // spazi liberi
-              for (final (s, e) in _freeRanges(w.day, b, w.appointments, w.timeOff))
-                Positioned(
-                  top: _y(s) + 2,
-                  height: _y(e) - _y(s) - 4,
-                  left: gutter + 4,
-                  right: 4,
-                  child: _FreeBlock(
-                    minutes: e - s,
-                    onTap: () => w.onTapEmpty(DateTime(w.day.year, w.day.month, w.day.day, 0, s)),
-                    onLongPress: () => w.onLongPressEmpty(s, e - s > 60 ? s + 30 : e),
-                  ),
-                ),
-              // ferie, pause, blocchi
-              for (final t in w.timeOff)
-                () {
-                  final (s0, e0) = _offRange(w.day, t);
-                  final s = s0.clamp(range.$1, range.$2);
-                  final e = e0.clamp(range.$1, range.$2);
-                  return Positioned(
-                    top: _y(s) + 1,
-                    height: (_y(e) - _y(s) - 2).clamp(24.0, double.infinity),
-                    left: gutter + 4,
-                    right: 4,
-                    child: _OffBlock(timeOff: t, from: s0, to: e0, onTap: () => w.onTapTimeOff(t)),
-                  );
-                }(),
-              // appuntamenti
-              for (var i = 0; i < w.appointments.length; i++)
-                Positioned(
-                  top: _y(_minuteOf(w.appointments[i].start)) + 1,
-                  height: _blockHeight(i),
-                  left: gutter + 4,
-                  right: 4,
-                  child: _LaneCard(
-                    appointment: w.appointments[i],
-                    color: w.color,
-                    onTap: () => w.onTapAppointment(w.appointments[i]),
-                    onDone: () => w.onDone(w.appointments[i]),
-                  ),
-                ),
-              // ora attuale
-              if (isToday && _minuteOf(DateTime.now()) >= range.$1 && _minuteOf(DateTime.now()) <= range.$2)
-                Positioned(
-                  top: _y(_minuteOf(DateTime.now())) - 9,
-                  left: 0,
-                  right: 0,
-                  child: IgnorePointer(
-                    child: Row(
-                      children: [
-                        Container(
-                          width: gutter - 8,
-                          padding: const EdgeInsets.symmetric(vertical: 2),
-                          decoration: BoxDecoration(color: AppColors.danger, borderRadius: BorderRadius.circular(4)),
-                          child: Text(
-                            fmtTime(DateTime.now()),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                        Expanded(child: Container(height: 1.5, color: AppColors.danger)),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _FreeBlock extends StatelessWidget {
-  const _FreeBlock({required this.minutes, required this.onTap, required this.onLongPress});
-  final int minutes;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: Colors.transparent,
-    child: InkWell(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.quietBorder),
-        ),
-        child: LayoutBuilder(
-          builder: (context, c) => c.maxHeight < 20
-              ? const SizedBox.shrink()
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.add, size: 15, color: AppColors.muted),
-                    const SizedBox(width: 6),
-                    Text(
-                      'libero ${fmtDuration(minutes)}',
-                      style: const TextStyle(color: AppColors.muted, fontSize: 12.5),
-                    ),
-                  ],
-                ),
-        ),
-      ),
-    ),
-  );
-}
-
-class _OffBlock extends StatelessWidget {
-  const _OffBlock({required this.timeOff, required this.from, required this.to, required this.onTap});
-  final TimeOff timeOff;
-  final int from;
-  final int to;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final allDay = from == 0 && to == 24 * 60;
-    return Material(
-      color: AppColors.warning.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          alignment: Alignment.topLeft,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.block, size: 15, color: AppColors.warning),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  [
-                    timeOff.reason.isEmpty ? 'Assente' : timeOff.reason,
-                    allDay ? 'tutto il giorno' : '${formatTime(from)} – ${formatTime(to)}',
-                  ].join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppColors.warning, fontSize: 12.5, fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Appuntamento nella corsia. Con il tasto ✓ si chiude quello in corso o passato.
-class _LaneCard extends StatelessWidget {
-  const _LaneCard({required this.appointment, required this.color, required this.onTap, required this.onDone});
-  final Appointment appointment;
-  final Color color;
-  final VoidCallback onTap;
-  final VoidCallback onDone;
-
-  @override
-  Widget build(BuildContext context) {
-    final a = appointment;
-    final now = DateTime.now();
-    final confirmed = a.status == AppointmentStatus.confirmed;
-    final running = confirmed && !a.start.isAfter(now) && a.end.isAfter(now);
-    final toClose = confirmed && !a.end.isAfter(now);
-    final done = a.status == AppointmentStatus.completed;
-    final noShow = a.status == AppointmentStatus.noShow;
-    final name = a.customerName.isEmpty ? 'Cliente' : a.customerName;
-    final mins = a.end.difference(a.start).inMinutes;
-    final nameColor = done ? AppColors.silver : AppColors.white;
-
-    return Material(
-      color: noShow
-          ? AppColors.warning.withValues(alpha: 0.10)
-          : done
-          ? const Color(0xFF1A1A1A)
-          : const Color(0xFF262626),
-      borderRadius: BorderRadius.circular(8),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: running ? Border.all(color: AppColors.white.withValues(alpha: 0.55)) : null,
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(width: 4, color: done || noShow ? color.withValues(alpha: 0.4) : color),
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, c) {
-                    final tall = c.maxHeight >= 64;
-                    final mid = c.maxHeight >= 42;
-                    final status = Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (running) const _Tag('IN CORSO', AppColors.white),
-                        if (toClose && !running) const _Tag('DA CHIUDERE', AppColors.warning),
-                        if (noShow) const _Tag('NON VENUTO', AppColors.warning),
-                        if (done) const Icon(Icons.check_circle, size: 17, color: AppColors.success),
-                      ],
-                    );
-                    if (!mid) {
-                      // servizi brevi: una riga sola
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 9),
-                        child: Row(
-                          children: [
-                            Text(
-                              fmtTime(a.start),
-                              style: TextStyle(color: nameColor, fontSize: 12.5, fontWeight: FontWeight.w800),
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                '$name · ${a.serviceName}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(color: nameColor, fontSize: 13, fontWeight: FontWeight.w700),
-                              ),
-                            ),
-                            status,
-                          ],
-                        ),
-                      );
-                    }
-                    return Padding(
-                      padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(color: nameColor, fontSize: 15, fontWeight: FontWeight.w700),
-                                ),
-                              ),
-                              status,
-                            ],
-                          ),
-                          Text(
-                            '${fmtTime(a.start)}–${fmtTime(a.end)} · ${a.serviceName}'
-                            '${tall ? '' : ' · ${fmtPrice(a.price)}'}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: AppColors.silver, fontSize: 12.5),
-                          ),
-                          if (tall) ...[
-                            Text(
-                              '$mins min · ${fmtPrice(a.price)}',
-                              style: const TextStyle(color: AppColors.muted, fontSize: 12),
-                            ),
-                            if (a.notes.isNotEmpty)
-                              Text(
-                                '“${a.notes}”',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: AppColors.muted,
-                                  fontSize: 12,
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                          ],
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-              // chiusura rapida: appuntamento iniziato e ancora da segnare
-              if (confirmed && !a.start.isAfter(now))
-                IconButton(
-                  tooltip: 'Segna completato',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: onDone,
-                  icon: const Icon(Icons.check_circle_outline, color: AppColors.success),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Tag extends StatelessWidget {
-  const _Tag(this.text, this.color);
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(left: 6),
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(4)),
-    child: Text(
-      text,
-      style: TextStyle(color: color, fontSize: 9.5, fontWeight: FontWeight.w800, letterSpacing: 0.6),
-    ),
-  );
 }
 
 // ---------------------------------------------------------------------------
