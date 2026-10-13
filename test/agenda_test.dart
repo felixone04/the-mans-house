@@ -77,7 +77,9 @@ void main() {
     for (final b in state.barbers) {
       expect(find.text(b.name), findsOneWidget);
     }
-    expect(find.textContaining('PRIMO'), findsWidgets);
+    // solo i nomi: nessun dettaglio prima di aprire il barbiere
+    expect(find.textContaining('appuntament'), findsNothing);
+    expect(find.textContaining('€'), findsNothing);
 
     await tester.tap(find.text(state.barbers.first.name));
     await settle(tester);
@@ -89,17 +91,25 @@ void main() {
   testWidgets('giornata del barbiere: arrivato, completato e acconto', (tester) async {
     final (state, backend) = await pumpBarberDay(tester);
     final barber = state.barbers.first;
+    // nessuno ancora arrivato: schede rosse "DA ARRIVARE"
+    expect(find.text('DA ARRIVARE'), findsWidgets);
 
-    await tester.tap(find.text('Arrivato?').first);
-    await settle(tester);
+    // niente "Arrivato": completato vuol dire arrivato
+    expect(find.textContaining('Arrivato'), findsNothing);
     var a = await firstOfDay(tester, backend, barber.id);
-    expect(a.arrivedAt, isNotNull);
-    expect(find.textContaining('Arrivato '), findsOneWidget);
+    // toccando la scheda si apre il dettaglio con le altre azioni
+    await tester.tap(find.text(a.customerName).first);
+    await settle(tester);
+    expect(find.text('Sposta appuntamento'), findsOneWidget);
+    expect(find.textContaining('arrivato'), findsNothing);
+    await tester.tapAt(const Offset(10, 10)); // chiude il dettaglio
+    await settle(tester);
 
     await tester.tap(find.text('Completato?').first);
     await settle(tester);
     a = await firstOfDay(tester, backend, barber.id);
     expect(a.status, AppointmentStatus.completed);
+    expect(a.arrivedAt, isNotNull); // completato = arrivato
     expect(find.text('COMPLETATO'), findsOneWidget);
 
     // acconto di 5 euro: resta il resto
@@ -116,6 +126,69 @@ void main() {
     expect(a.outstanding, a.price - 5);
     expect(find.text('Resta ${fmtPriceForTest(a.price - 5)}'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('cliente che torna con un pagamento in sospeso: avviso, totale e saldo', (tester) async {
+    final day = nextTuesday();
+    // prepara un arretrato prima di aprire la giornata
+    late final Appointment today;
+    late final Appointment previous;
+    final (state, backend) = await pumpPage(tester, (s) => const SizedBox());
+    await tester.runAsync(() async {
+      final first = state.barbers.first;
+      final all = await backend.appointmentsBetween(
+        day.subtract(const Duration(days: 10)),
+        day.add(const Duration(days: 1)),
+      );
+      today = all.firstWhere(
+        (a) =>
+            a.barberId == first.id &&
+            dayOnly(a.start) == day &&
+            all.any((p) => p.customerName == a.customerName && p.start.isBefore(day)),
+      );
+      previous = all.lastWhere((p) => p.customerName == today.customerName && p.start.isBefore(day));
+      await backend.setAppointmentStatus(previous.id, AppointmentStatus.completed);
+      await backend.updateVisit(previous.id, arrivedAt: previous.start, payment: PaymentStatus.later, amountPaid: 0);
+    });
+    await tester.pumpWidget(
+      AppScope(
+        state: state,
+        child: MaterialApp(
+          locale: const Locale('it', 'IT'),
+          supportedLocales: const [Locale('it', 'IT')],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Scaffold(
+            body: BarberDayScreen(barber: state.barbers.first, day: day),
+          ),
+        ),
+      ),
+    );
+    await settle(tester);
+
+    final total = previous.price + today.price;
+    final banner = find.text('Totale da pagare oggi: ${fmtPriceForTest(total)}');
+    expect(banner, findsWidgets);
+    expect(find.textContaining('Deve ancora ${fmtPriceForTest(previous.price)}'), findsWidgets);
+
+    // pagando tutto si salda anche l'arretrato
+    await tester.ensureVisible(banner.first);
+    final card = find.ancestor(of: banner.first, matching: find.byType(Material)).first;
+    await tester.tap(find.descendant(of: card, matching: find.text('Pagato?')));
+    await settle(tester);
+    expect(find.textContaining('Salda anche l\'arretrato'), findsOneWidget);
+    await tester.tap(find.text('SALVA'));
+    await settle(tester);
+
+    final after = await tester.runAsync(
+      () => backend.appointmentsBetween(day.subtract(const Duration(days: 10)), day.add(const Duration(days: 1))),
+    );
+    expect(after!.firstWhere((a) => a.id == previous.id).outstanding, 0);
+    expect(after.firstWhere((a) => a.id == today.id).payment, PaymentStatus.paid);
+    expect(find.textContaining('Deve ancora'), findsNothing);
   });
 
   testWidgets('giornata del barbiere: tenendo premuto uno spazio libero si blocca l\'orario', (tester) async {

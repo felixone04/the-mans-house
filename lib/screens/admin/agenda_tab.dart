@@ -191,7 +191,7 @@ class _AgendaTabState extends State<AgendaTab> with AgendaActions {
         },
       );
     } else {
-      body = _BarberPanels(day: _day, barbers: barbers, appointments: active, timeOff: _dayOff, onOpen: _openBarber);
+      body = _BarberPanels(barbers: barbers, onOpen: _openBarber);
     }
 
     // telefono: agenda su fondo chiaro, a foglio
@@ -379,7 +379,7 @@ class _AgendaHeader extends StatelessWidget {
                   day: days[i],
                   selected: days[i] == day,
                   today: days[i] == today,
-                  count: week.where((a) => dayOnly(a.start) == days[i] && _counts(a)).length,
+                  count: light ? 0 : week.where((a) => dayOnly(a.start) == days[i] && _counts(a)).length,
                   light: light,
                   open: barbers.any(
                     (b) => (filter == null || b.id == filter) && b.hoursFor(days[i].weekday).isNotEmpty,
@@ -391,17 +391,19 @@ class _AgendaHeader extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        Text(
-          [
-            // il giorno e' gia' evidenziato nella settimana
-            '${active.length} ${active.length == 1 ? 'appuntamento' : 'appuntamenti'}',
-            fmtPrice(revenue),
-            if (next != null) 'prossimo alle ${fmtTime(next.start)}',
-          ].join(' · '),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(color: light ? AgendaLight.sub : AppColors.silver, fontSize: 12.5),
-        ),
+        // telefono: nessun dettaglio prima di aprire il barbiere
+        if (!light)
+          Text(
+            [
+              // il giorno e' gia' evidenziato nella settimana
+              '${active.length} ${active.length == 1 ? 'appuntamento' : 'appuntamenti'}',
+              fmtPrice(revenue),
+              if (next != null) 'prossimo alle ${fmtTime(next.start)}',
+            ].join(' · '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: AppColors.silver, fontSize: 12.5),
+          ),
         // filtro solo in griglia: nelle corsie si sceglie il barbiere dalle schede
         if (grid && barbers.length > 1) ...[
           const SizedBox(height: 8),
@@ -560,28 +562,19 @@ class _FilterChip extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _BarberPanels extends StatelessWidget {
-  const _BarberPanels({
-    required this.day,
-    required this.barbers,
-    required this.appointments,
-    required this.timeOff,
-    required this.onOpen,
-  });
-  final DateTime day;
+  const _BarberPanels({required this.barbers, required this.onOpen});
   final List<Barber> barbers;
-  final List<Appointment> appointments; // del giorno, senza annullati
-  final Map<String, List<TimeOff>> timeOff;
   final ValueChanged<Barber> onOpen;
 
   static const _gap = 10.0;
-  static const _minH = 150.0;
+  static const _minH = 96.0;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, c) {
       // i riquadri si dividono lo schermo; se sono tanti, la pagina scorre
       final avail = c.maxHeight - 24 - _gap * (barbers.length - 1);
-      final h = (avail / barbers.length).clamp(_minH, 260.0);
+      final h = (avail / barbers.length).clamp(_minH, 220.0);
       return SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(0, 6, 0, 18),
         child: ResponsiveCenter(
@@ -594,12 +587,8 @@ class _BarberPanels extends StatelessWidget {
                 SizedBox(
                   height: h,
                   child: _BarberPanel(
-                    day: day,
                     barber: barbers[i],
                     tone: barberTone(barbers, barbers[i].id),
-                    appointments: appointments.where((a) => a.barberId == barbers[i].id).toList()
-                      ..sort((x, y) => x.start.compareTo(y.start)),
-                    timeOff: timeOff[barbers[i].id] ?? const [],
                     onTap: () => onOpen(barbers[i]),
                   ),
                 ),
@@ -612,207 +601,38 @@ class _BarberPanels extends StatelessWidget {
   );
 }
 
+/// Riquadro del barbiere: solo il nome, come una sezione da aprire.
 class _BarberPanel extends StatelessWidget {
-  const _BarberPanel({
-    required this.day,
-    required this.barber,
-    required this.tone,
-    required this.appointments,
-    required this.timeOff,
-    required this.onTap,
-  });
-  final DateTime day;
+  const _BarberPanel({required this.barber, required this.tone, required this.onTap});
   final Barber barber;
   final BarberTone tone;
-  final List<Appointment> appointments;
-  final List<TimeOff> timeOff;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final isToday = day == dayOnly(now);
-    final hours = barber.hoursFor(day.weekday);
-    final kept = appointments.where((a) => a.status != AppointmentStatus.noShow).toList();
-    final total = kept.fold<double>(0, (s, a) => s + a.price);
-    final running = isToday
-        ? appointments
-              .where((a) => !a.start.isAfter(now) && a.end.isAfter(now) && a.status != AppointmentStatus.noShow)
-              .firstOrNull
-        : null;
-    final upcoming = appointments
-        .where((a) => a.status == AppointmentStatus.confirmed && (!isToday || a.start.isAfter(now)))
-        .toList();
-    final next = upcoming.firstOrNull;
-    final toPay = appointments.where((a) => a.outstanding > 0).length;
-
-    // riempimento della giornata (minuti prenotati / minuti di lavoro)
-    final workMin = hours.fold<int>(0, (s, h) => s + h.end - h.start);
-    final bookedMin = kept.fold<int>(0, (s, a) => s + a.end.difference(a.start).inMinutes);
-    final fill = workMin == 0 ? 0.0 : (bookedMin / workMin).clamp(0.0, 1.0);
-
-    Widget focus;
-    if (hours.isEmpty && appointments.isEmpty) {
-      focus = Text(
-        'Riposo oggi',
-        style: TextStyle(color: tone.mid, fontSize: 17, fontWeight: FontWeight.w700),
-      );
-    } else if (running != null) {
-      focus = _Focus(label: 'IN POLTRONA', appointment: running, tone: tone, live: true);
-    } else if (next != null) {
-      focus = _Focus(label: isToday ? 'PROSSIMO' : 'PRIMO', appointment: next, tone: tone);
-    } else {
-      focus = Text(
-        appointments.isEmpty ? 'Nessun appuntamento' : 'Giornata finita',
-        style: TextStyle(color: tone.mid, fontSize: 17, fontWeight: FontWeight.w700),
-      );
-    }
-
-    return Material(
-      color: tone.bg,
-      borderRadius: BorderRadius.circular(20),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 19,
-                    backgroundColor: tone.accent,
-                    child: Text(
-                      barber.initials,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          barber.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: tone.ink, fontSize: 20, fontWeight: FontWeight.w800, height: 1.1),
-                        ),
-                        Text(
-                          [
-                            '${kept.length} ${kept.length == 1 ? 'appuntamento' : 'appuntamenti'}',
-                            fmtPrice(total),
-                            if (toPay > 0) '$toPay da incassare',
-                          ].join(' · '),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: tone.mid, fontSize: 12.5, fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(Icons.chevron_right, color: tone.ink, size: 28),
-                ],
-              ),
-              const Spacer(),
-              focus,
-              const Spacer(),
-              if (workMin > 0)
-                Row(
-                  children: [
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: fill,
-                          minHeight: 7,
-                          color: tone.accent,
-                          backgroundColor: Colors.white.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      'pieno ${(fill * 100).round()}%',
-                      style: TextStyle(color: tone.mid, fontSize: 12, fontWeight: FontWeight.w700),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Appuntamento in evidenza nel riquadro: orario grande, cliente, servizio.
-class _Focus extends StatelessWidget {
-  const _Focus({required this.label, required this.appointment, required this.tone, this.live = false});
-  final String label;
-  final Appointment appointment;
-  final BarberTone tone;
-  final bool live;
-
-  @override
-  Widget build(BuildContext context) {
-    final a = appointment;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+  Widget build(BuildContext context) => Material(
+    color: tone.bg,
+    borderRadius: BorderRadius.circular(20),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: live ? tone.accent : Colors.white.withValues(alpha: 0.8),
-                borderRadius: BorderRadius.circular(5),
-              ),
+            Expanded(
               child: Text(
-                label,
-                style: TextStyle(
-                  color: live ? Colors.white : tone.mid,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.6,
-                ),
+                barber.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: tone.ink, fontSize: 30, fontWeight: FontWeight.w800, letterSpacing: 0.3),
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              fmtTime(a.start),
-              style: TextStyle(color: tone.ink, fontSize: 28, height: 1.1, fontWeight: FontWeight.w800),
-            ),
+            Icon(Icons.chevron_right, color: tone.ink, size: 34),
           ],
         ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                a.customerName.isEmpty ? 'Cliente' : a.customerName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: tone.ink, fontSize: 17, fontWeight: FontWeight.w800),
-              ),
-              Text(
-                '${a.serviceName} · fino alle ${fmtTime(a.end)}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: tone.mid, fontSize: 13.5, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+      ),
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------

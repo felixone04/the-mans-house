@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../data/backend.dart';
 import '../../data/slots.dart';
 import '../../models.dart';
 import '../../state/app_state.dart';
@@ -56,6 +57,7 @@ class _BarberDayScreenState extends State<BarberDayScreen> with AgendaActions {
               .toList()
             ..sort((x, y) => x.start.compareTo(y.start));
       _off = (results[1] as List<TimeOff>).where((t) => t.start.isBefore(next) && t.end.isAfter(_day)).toList();
+      _debts = await _loadDebts(backend);
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -70,36 +72,48 @@ class _BarberDayScreenState extends State<BarberDayScreen> with AgendaActions {
     }
   }
 
+  /// Pagamenti lasciati in sospeso nelle visite precedenti, per appuntamento.
+  Map<String, List<Appointment>> _debts = {};
+
+  Future<Map<String, List<Appointment>>> _loadDebts(Backend backend) async {
+    String keyOf(Appointment a) => a.userId ?? '${CustomerSummary.walkInPrefix}${a.customerName}';
+    final customers = {
+      for (final a in _items.where((a) => a.userId != null || a.customerName.isNotEmpty))
+        keyOf(a): CustomerSummary(id: keyOf(a), email: '', fullName: a.customerName, phone: '', bookings: 0),
+    };
+    final histories = await Future.wait(customers.values.map(backend.customerAppointments));
+    final byCustomer = {for (final (i, k) in customers.keys.indexed) k: histories[i]};
+    return {
+      for (final a in _items)
+        a.id: (byCustomer[keyOf(a)] ?? const <Appointment>[])
+            .where(
+              (x) =>
+                  x.id != a.id &&
+                  x.start.isBefore(a.start) &&
+                  x.status != AppointmentStatus.cancelled &&
+                  x.outstanding > 0,
+            )
+            .toList(),
+    };
+  }
+
   void _shift(int days) {
     _day = DateTime(_day.year, _day.month, _day.day + days);
     _load();
   }
 
-  // --- Arrivo, completato, pagamento ---
+  // --- Completato e pagamento ---
 
-  Future<void> _saveVisit(
-    Appointment a, {
-    DateTime? arrivedAt,
-    bool clearArrived = false,
-    PaymentStatus? payment,
-    double? paid,
-  }) async {
+  Future<void> _savePayment(Appointment a, PaymentStatus payment, double paid) async {
     HapticFeedback.selectionClick();
     try {
-      await AppScope.read(context).backend.updateVisit(
-        a.id,
-        arrivedAt: clearArrived ? null : (arrivedAt ?? a.arrivedAt),
-        payment: payment ?? a.payment,
-        amountPaid: paid ?? a.amountPaid,
-      );
+      await AppScope.read(context).backend
+          .updateVisit(a.id, arrivedAt: a.arrivedAt, payment: payment, amountPaid: paid);
       await _load(silent: true);
     } catch (e) {
       if (mounted) showError(context, e);
     }
   }
-
-  Future<void> _toggleArrived(Appointment a) =>
-      a.arrivedAt == null ? _saveVisit(a, arrivedAt: DateTime.now()) : _saveVisit(a, clearArrived: true);
 
   Future<void> _toggleDone(Appointment a) async {
     HapticFeedback.selectionClick();
@@ -121,14 +135,29 @@ class _BarberDayScreenState extends State<BarberDayScreen> with AgendaActions {
   }
 
   Future<void> _payment(Appointment a) async {
-    final r = await showModalBottomSheet<(PaymentStatus, double)>(
+    final debts = _debts[a.id] ?? const <Appointment>[];
+    final r = await showModalBottomSheet<(PaymentStatus, double, bool)>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AgendaLight.card,
       constraints: const BoxConstraints(maxWidth: 520),
-      builder: (_) => _PaymentSheet(appointment: a),
+      builder: (_) => _PaymentSheet(appointment: a, debts: debts),
     );
-    if (r != null) await _saveVisit(a, payment: r.$1, paid: r.$2);
+    if (r == null || !mounted) return;
+    final (payment, paid, settleDebts) = r;
+    if (settleDebts) {
+      // salda anche le visite precedenti rimaste da pagare
+      final backend = AppScope.read(context).backend;
+      try {
+        for (final d in debts) {
+          await backend.updateVisit(d.id, arrivedAt: d.arrivedAt, payment: PaymentStatus.paid, amountPaid: d.price);
+        }
+      } catch (e) {
+        if (mounted) showError(context, e);
+        return;
+      }
+    }
+    await _savePayment(a, payment, paid);
   }
 
   @override
@@ -152,9 +181,8 @@ class _BarberDayScreenState extends State<BarberDayScreen> with AgendaActions {
           1,
           _VisitCard(
             appointment: a,
-            tone: tone,
+            debts: _debts[a.id] ?? const [],
             onTap: () => openAppointment(a),
-            onArrived: () => _toggleArrived(a),
             onDone: () => _toggleDone(a),
             onPayment: () => _payment(a),
           ),
@@ -305,20 +333,36 @@ class _BarberDayScreenState extends State<BarberDayScreen> with AgendaActions {
   }
 }
 
+/// Rosso: da completare (cliente non ancora arrivato). Bianco: completato.
+/// Grigio: non presentato.
+const BarberTone _waitingTone = (
+  bg: Color(0xFFFCE4E4),
+  mid: Color(0xFFA32D2D),
+  accent: Color(0xFFD33A3A),
+  ink: Color(0xFF501313),
+);
+const BarberTone _doneTone = (bg: AgendaLight.card, mid: AgendaLight.sub, accent: AgendaLight.ok, ink: AgendaLight.ink);
+const BarberTone _noShowTone = (
+  bg: Color(0xFFEDEDED),
+  mid: AgendaLight.muted,
+  accent: AgendaLight.muted,
+  ink: AgendaLight.muted,
+);
+
 /// Scheda grande di un appuntamento.
 class _VisitCard extends StatelessWidget {
   const _VisitCard({
     required this.appointment,
-    required this.tone,
+    required this.debts,
     required this.onTap,
-    required this.onArrived,
     required this.onDone,
     required this.onPayment,
   });
   final Appointment appointment;
-  final BarberTone tone;
+
+  /// Visite precedenti dello stesso cliente rimaste da pagare.
+  final List<Appointment> debts;
   final VoidCallback onTap;
-  final VoidCallback onArrived;
   final VoidCallback onDone;
   final VoidCallback onPayment;
 
@@ -328,17 +372,23 @@ class _VisitCard extends StatelessWidget {
     final now = DateTime.now();
     final done = a.status == AppointmentStatus.completed;
     final noShow = a.status == AppointmentStatus.noShow;
-    final running = a.status == AppointmentStatus.confirmed && !a.start.isAfter(now) && a.end.isAfter(now);
+    // completato = arrivato: finche' non e' completato la scheda resta rossa
+    final waiting = a.status == AppointmentStatus.confirmed;
+    final started = !a.start.isAfter(now);
+    final ended = !a.end.isAfter(now);
+    final t = noShow
+        ? _noShowTone
+        : done
+        ? _doneTone
+        : _waitingTone;
     final mins = a.end.difference(a.start).inMinutes;
-    // completati e non presentati restano leggibili ma piu' tenui
-    final bg = noShow ? const Color(0xFFEDEDED) : (done ? AgendaLight.card : tone.bg);
-    final ink = noShow ? AgendaLight.muted : tone.ink;
-    final mid = noShow ? AgendaLight.muted : tone.mid;
+    final debt = debts.fold<double>(0, (s, d) => s + d.outstanding);
+    final dueToday = (a.price - a.collected).clamp(0, double.infinity) + debt;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
-        color: bg,
+        color: t.bg,
         borderRadius: BorderRadius.circular(16),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -346,10 +396,10 @@ class _VisitCard extends StatelessWidget {
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              border: running
-                  ? Border.all(color: tone.accent, width: 2.5)
-                  : done
-                  ? Border.all(color: tone.bg, width: 2)
+              border: done
+                  ? Border.all(color: AgendaLight.line, width: 1.5)
+                  : waiting
+                  ? Border.all(color: _waitingTone.accent.withValues(alpha: 0.45), width: 1.5)
                   : null,
             ),
             padding: const EdgeInsets.fromLTRB(16, 12, 14, 12),
@@ -361,7 +411,7 @@ class _VisitCard extends StatelessWidget {
                   children: [
                     Text(
                       fmtTime(a.start),
-                      style: TextStyle(color: ink, fontSize: 30, height: 1, fontWeight: FontWeight.w800),
+                      style: TextStyle(color: t.ink, fontSize: 30, height: 1, fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -371,11 +421,20 @@ class _VisitCard extends StatelessWidget {
                           'fino alle ${fmtTime(a.end)} · $mins min',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: mid, fontSize: 13.5, fontWeight: FontWeight.w600),
+                          style: TextStyle(color: t.mid, fontSize: 13.5, fontWeight: FontWeight.w600),
                         ),
                       ),
                     ),
-                    if (running) _Pill('IN CORSO', fg: Colors.white, bg: tone.accent),
+                    if (waiting)
+                      _Pill(
+                        ended
+                            ? 'DA CHIUDERE'
+                            : started
+                            ? 'IN CORSO'
+                            : 'DA ARRIVARE',
+                        fg: Colors.white,
+                        bg: _waitingTone.accent,
+                      ),
                     if (done) const _Pill('COMPLETATO', fg: Colors.white, bg: AgendaLight.ok),
                     if (noShow) const _Pill('NON VENUTO', fg: Colors.white, bg: AgendaLight.muted),
                   ],
@@ -383,40 +442,36 @@ class _VisitCard extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   a.customerName.isEmpty ? 'Cliente' : a.customerName,
-                  style: TextStyle(color: ink, fontSize: 20, fontWeight: FontWeight.w800),
+                  style: TextStyle(color: t.ink, fontSize: 20, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   '${a.serviceName} · ${fmtPrice(a.price)}',
-                  style: TextStyle(color: mid, fontSize: 15, fontWeight: FontWeight.w600),
+                  style: TextStyle(color: t.mid, fontSize: 15, fontWeight: FontWeight.w600),
                 ),
                 if (a.notes.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
                     '“${a.notes}”',
-                    style: TextStyle(color: mid, fontSize: 13.5, fontStyle: FontStyle.italic),
+                    style: TextStyle(color: t.mid, fontSize: 13.5, fontStyle: FontStyle.italic),
                   ),
+                ],
+                // l'avviso serve al momento di incassare: non sulle visite gia' pagate
+                if (debt > 0 && !noShow && a.payment != PaymentStatus.paid) ...[
+                  const SizedBox(height: 10),
+                  _DebtBanner(debts: debts, debt: debt, dueToday: dueToday.toDouble()),
                 ],
                 if (!noShow) ...[
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Expanded(
-                        child: _StepButton(
-                          icon: Icons.how_to_reg_outlined,
-                          label: a.arrivedAt == null ? 'Arrivato?' : 'Arrivato ${fmtTime(a.arrivedAt!)}',
-                          on: a.arrivedAt != null,
-                          tone: tone,
-                          onTap: onArrived,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
+                      // l'arrivo si segna dal dettaglio (tocco sulla scheda)
                       Expanded(
                         child: _StepButton(
                           icon: Icons.content_cut,
                           label: done ? 'Completato' : 'Completato?',
                           on: done,
-                          tone: tone,
+                          tone: t,
                           onTap: onDone,
                         ),
                       ),
@@ -427,7 +482,7 @@ class _VisitCard extends StatelessWidget {
                           label: _paymentLabel(a),
                           on: a.payment == PaymentStatus.paid,
                           warn: a.payment == PaymentStatus.later || a.payment == PaymentStatus.deposit,
-                          tone: tone,
+                          tone: t,
                           onTap: onPayment,
                         ),
                       ),
@@ -448,6 +503,49 @@ class _VisitCard extends StatelessWidget {
     PaymentStatus.later => 'Paga dopo',
     PaymentStatus.deposit => 'Resta ${fmtPrice(a.price - a.collected)}',
   };
+}
+
+/// Avviso: il cliente deve ancora pagare visite precedenti.
+class _DebtBanner extends StatelessWidget {
+  const _DebtBanner({required this.debts, required this.debt, required this.dueToday});
+  final List<Appointment> debts;
+  final double debt;
+  final double dueToday;
+
+  @override
+  Widget build(BuildContext context) {
+    final last = debts.map((d) => d.start).reduce((x, y) => x.isAfter(y) ? x : y);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFE8B8),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE0A030)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Color(0xFF8A4B00), size: 26),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Deve ancora ${fmtPrice(debt)} '
+                  '${debts.length == 1 ? 'dalla visita del ${fmtDayShort(last)}' : 'da ${debts.length} visite precedenti'}',
+                  style: const TextStyle(color: Color(0xFF6B3A00), fontSize: 13.5, fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  'Totale da pagare oggi: ${fmtPrice(dueToday)}',
+                  style: const TextStyle(color: Color(0xFF4A2800), fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Pulsante di stato (Arrivato / Completato / Pagamento): pieno quando fatto.
@@ -637,8 +735,11 @@ class _NowMarker extends StatelessWidget {
 
 /// Pagamento: pagato, paga dopo, acconto (con importo) o non ancora pagato.
 class _PaymentSheet extends StatefulWidget {
-  const _PaymentSheet({required this.appointment});
+  const _PaymentSheet({required this.appointment, this.debts = const []});
   final Appointment appointment;
+
+  /// Visite precedenti ancora da pagare (arretrato).
+  final List<Appointment> debts;
 
   @override
   State<_PaymentSheet> createState() => _PaymentSheetState();
@@ -676,8 +777,13 @@ class _PaymentSheetState extends State<_PaymentSheet> {
       case PaymentStatus.unpaid:
         paid = 0;
     }
-    Navigator.pop(context, (_choice, paid));
+    Navigator.pop(context, (_choice, paid, _choice == PaymentStatus.paid && _settleDebts && _debt > 0));
   }
+
+  double get _debt => widget.debts.fold<double>(0, (s, d) => s + d.outstanding);
+
+  /// Con l'arretrato: salda anche le visite precedenti.
+  bool _settleDebts = true;
 
   Widget _option(PaymentStatus p, IconData icon, String title, String subtitle) {
     final selected = _choice == p;
@@ -741,6 +847,32 @@ class _PaymentSheetState extends State<_PaymentSheet> {
               '${a.customerName} · ${a.serviceName}',
               style: const TextStyle(color: AgendaLight.sub, fontSize: 13.5),
             ),
+            if (_debt > 0 && _choice == PaymentStatus.paid) ...[
+              const SizedBox(height: 12),
+              Material(
+                color: const Color(0xFFFFE8B8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: Color(0xFFE0A030)),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: CheckboxListTile(
+                  contentPadding: const EdgeInsets.fromLTRB(12, 0, 4, 0),
+                  value: _settleDebts,
+                  activeColor: const Color(0xFF8A4B00),
+                  checkColor: Colors.white,
+                  onChanged: (v) => setState(() => _settleDebts = v ?? false),
+                  title: Text(
+                    'Salda anche l\'arretrato: ${fmtPrice(_debt)}',
+                    style: const TextStyle(color: Color(0xFF4A2800), fontSize: 15, fontWeight: FontWeight.w800),
+                  ),
+                  subtitle: Text(
+                    'Totale oggi: ${fmtPrice(a.price - a.collected + _debt)}',
+                    style: const TextStyle(color: Color(0xFF6B3A00), fontSize: 13.5, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 14),
             _option(PaymentStatus.paid, Icons.check_circle_outline, 'Pagato', 'Ha pagato tutto: ${fmtPrice(a.price)}'),
             _option(PaymentStatus.deposit, Icons.savings_outlined, 'Acconto', 'Ha lasciato una parte, il resto dopo'),

@@ -16,9 +16,9 @@ Backend: **Supabase** (database, login, funzioni). Promemoria: **WhatsApp** (Met
 
 **Area riservata** (solo account amministratore)
 - Agenda con settimana in alto (numero di appuntamenti per giorno), riepilogo del giorno e filtro per barbiere (un colore per barbiere)
-  - **Barbieri** (predefinita su telefono, colori chiari): lo schermo è diviso in un riquadro pastello per barbiere con appuntamenti, incasso, cliente in poltrona o prossimo e riempimento della giornata. Toccando un barbiere si apre la sua giornata: una scheda grande per appuntamento (orario, cliente, servizio, prezzo, note), spazi liberi e ora attuale
+  - **Barbieri** (predefinita su telefono, colori chiari): lo schermo è diviso in un riquadro pastello per barbiere con solo il nome. Toccandolo si apre la sua giornata: una scheda grande per appuntamento (orario, cliente, servizio, prezzo, note), rossa finché non è completato e bianca quando è completato, spazi liberi e ora attuale. Toccando la scheda: chiama, promemoria, scheda cliente, sposta, annulla
   - **Griglia** (predefinita su tablet/computer): una colonna per barbiere; su telefono scorre in verticale
-- Nella giornata del barbiere ogni appuntamento ha i pulsanti **Arrivato**, **Completato** e **Pagamento** (pagato, paga dopo, acconto con importo e resto). Il resto da incassare compare nella scheda cliente
+- Nella giornata del barbiere ogni appuntamento ha i pulsanti **Completato** e **Pagamento** (pagato, paga dopo, acconto con importo e resto). Se il cliente deve ancora pagare visite precedenti compare l'avviso con il **totale da pagare oggi**, e pagando si può saldare tutto insieme
 - Tocca un appuntamento per: promemoria WhatsApp, chiama, scheda cliente, sposta, completato, non presentato, annulla
 - Tocca uno spazio libero per inserire un appuntamento; tienilo premuto (o "+" → Blocca un orario) per bloccarlo (pausa, imprevisto...). Tocca un blocco per rimuoverlo
 - Servizi: aggiungi, modifica prezzo e durata, nascondi, elimina
