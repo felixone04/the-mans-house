@@ -141,7 +141,9 @@ class _AgendaTabState extends State<AgendaTab> with AgendaActions {
     final dayAppts = active.where((a) => shownIds.contains(a.barberId)).toList();
 
     final header = ResponsiveCenter(
-      maxWidth: 1200,
+      maxWidth: grid ? 1200 : _BarberPanels.wideMaxWidth,
+      // vista barbieri: tutto allineato a sinistra, come i riquadri sotto
+      alignment: grid ? Alignment.topCenter : Alignment.topLeft,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: _AgendaHeader(
         day: _day,
@@ -590,17 +592,24 @@ class _BarberPanels extends StatelessWidget {
 
   static const _gap = 10.0;
   static const _minH = 96.0;
+  static const _wideH = 110.0;
+
+  /// Larghezza massima di riquadri e intestazione su schermi larghi.
+  static const wideMaxWidth = 640.0;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, c) {
-      // i riquadri si dividono lo schermo; se sono tanti, la pagina scorre
       final avail = c.maxHeight - 24 - _gap * (barbers.length - 1);
-      final h = (avail / barbers.length).clamp(_minH, 220.0);
+      // telefono: i riquadri si dividono lo schermo; tablet e computer:
+      // colonna ordinata a sinistra con riquadri di altezza fissa
+      final wide = c.maxWidth >= 700;
+      final h = wide ? _wideH : (avail / barbers.length).clamp(_minH, 220.0);
       return SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(0, 6, 0, 18),
         child: ResponsiveCenter(
-          maxWidth: 720,
+          maxWidth: wideMaxWidth,
+          alignment: Alignment.topLeft,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Column(
             children: [

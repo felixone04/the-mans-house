@@ -396,14 +396,23 @@ class ServiceIcon extends StatelessWidget {
 /// Centra il contenuto con larghezza massima: la grafica resta identica su
 /// telefono, tablet e computer.
 class ResponsiveCenter extends StatelessWidget {
-  const ResponsiveCenter({super.key, required this.child, this.maxWidth = 560, this.padding});
+  const ResponsiveCenter({
+    super.key,
+    required this.child,
+    this.maxWidth = 560,
+    this.padding,
+    this.alignment = Alignment.topCenter,
+  });
   final Widget child;
   final double maxWidth;
   final EdgeInsetsGeometry? padding;
 
+  /// Su schermi larghi: centrato (predefinito) o allineato a sinistra.
+  final Alignment alignment;
+
   @override
   Widget build(BuildContext context) => Align(
-    alignment: Alignment.topCenter,
+    alignment: alignment,
     child: ConstrainedBox(
       constraints: BoxConstraints(maxWidth: maxWidth),
       child: Padding(padding: padding ?? const EdgeInsets.symmetric(horizontal: 20), child: child),

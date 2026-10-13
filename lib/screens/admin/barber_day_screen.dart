@@ -323,6 +323,7 @@ class _BarberDayScreenState extends State<BarberDayScreen> with AgendaActions {
                   children: [
                     ResponsiveCenter(
                       maxWidth: 640,
+                      alignment: Alignment.topLeft, // come i riquadri dei barbieri
                       padding: const EdgeInsets.symmetric(horizontal: 14),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
