@@ -98,6 +98,29 @@
 </head>
 <body>
   <!-- niente logo qui: lo mostra una sola volta la schermata di apertura dell'app -->
+  <script>
+    // Rimuove la vecchia memoria offline (service worker) rimasta sui dispositivi:
+    // mostrava la versione precedente dell'app. Se la pagina era servita da li',
+    // dopo la pulizia ricarica una sola volta per prendere la versione nuova.
+    (function () {
+      if (!('serviceWorker' in navigator)) return;
+      var controlled = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        return Promise.all(regs.map(function (r) { return r.unregister(); }));
+      }).then(function () {
+        return window.caches ? caches.keys().then(function (keys) {
+          return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+        }) : null;
+      }).then(function () {
+        try {
+          if (controlled && !sessionStorage.getItem('sw-cleaned')) {
+            sessionStorage.setItem('sw-cleaned', '1');
+            location.reload();
+          }
+        } catch (e) {}
+      });
+    })();
+  </script>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader

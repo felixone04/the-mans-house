@@ -131,7 +131,8 @@ class _AgendaTabState extends State<AgendaTab> with AgendaActions {
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
     final barbers = state.barbers;
-    _grid ??= MediaQuery.sizeOf(context).width >= 700;
+    // stessa agenda su telefono, tablet e computer; la griglia resta a scelta
+    _grid ??= false;
     final grid = _grid!;
     if (_filter != null && !barbers.any((b) => b.id == _filter)) _filter = null;
     final shown = _filter == null ? barbers : barbers.where((b) => b.id == _filter).toList();
