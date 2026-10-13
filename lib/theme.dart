@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'models.dart';
+
 /// Palette: nero sfumato al grigio, accenti bianco/argento.
 class AppColors {
   static const black = Color(0xFF0A0A0A);
@@ -23,10 +25,37 @@ class AppColors {
 
   static Color card = Colors.white.withValues(alpha: 0.05);
   static Color cardBorder = Colors.white.withValues(alpha: 0.10);
+
+  /// Pulsanti discreti in grigio (home: prenota e account).
+  static const quiet = Color(0xFF262626);
+  static const quietBorder = Color(0xFF3A3A3A);
+  static const quietText = Color(0xFFD6D6D6);
+
+  /// Un colore per barbiere in agenda (toni smorzati, leggibili sul nero).
+  static const barberPalette = [
+    Color(0xFF5DCAA5), // verde acqua
+    Color(0xFFF0997B), // corallo
+    Color(0xFF85B7EB), // azzurro
+    Color(0xFFAFA9EC), // lilla
+    Color(0xFFEFB45F), // ambra
+    Color(0xFFED93B1), // rosa
+    Color(0xFF97C459), // verde
+  ];
 }
 
+/// Colore del barbiere in base alla sua posizione nell'elenco.
+Color barberColor(List<Barber> barbers, String barberId) {
+  final i = barbers.indexWhere((b) => b.id == barberId);
+  return i < 0 ? AppColors.muted : AppColors.barberPalette[i % AppColors.barberPalette.length];
+}
+
+/// Nei test i caratteri non si scaricano: si usa il carattere predefinito.
+bool googleFontsEnabled = true;
+
 TextStyle slab({double size = 18, FontWeight weight = FontWeight.w500, Color? color, double spacing = 1.2}) =>
-    GoogleFonts.robotoSlab(fontSize: size, fontWeight: weight, color: color ?? AppColors.white, letterSpacing: spacing);
+    googleFontsEnabled
+        ? GoogleFonts.robotoSlab(fontSize: size, fontWeight: weight, color: color ?? AppColors.white, letterSpacing: spacing)
+        : TextStyle(fontSize: size, fontWeight: weight, color: color ?? AppColors.white, letterSpacing: spacing);
 
 ThemeData buildTheme() {
   final base = ThemeData(

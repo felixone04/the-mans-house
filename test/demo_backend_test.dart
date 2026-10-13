@@ -257,6 +257,51 @@ void main() {
     fail('nessun giorno con orari liberi');
   });
 
+  test('spostamento: stessa durata, orario libero, regole come l\'annullamento', () async {
+    await signUp('sposta@test.it');
+    final barber = (await backend.fetchBarbers()).first;
+    final service = (await backend.fetchServices()).first;
+    final start = await freeSlot(barber, service, DateTime.now().add(const Duration(hours: 4)));
+    final a = await backend.book(barberId: barber.id, serviceId: service.id, start: start);
+
+    // spostato sul primo orario libero dopo: stessa durata
+    final target = await freeSlot(barber, service, a.end);
+    await backend.rescheduleAppointment(a.id, barberId: barber.id, start: target);
+    final moved = (await backend.myAppointments()).firstWhere((x) => x.id == a.id);
+    expect(moved.start, target);
+    expect(moved.end, target.add(Duration(minutes: service.durationMin)));
+    // il vecchio orario torna libero
+    final busy = await backend.fetchBusy(start, start.add(const Duration(minutes: 1)));
+    expect(busy.where((x) => x.barberId == barber.id && !x.timeOff), isEmpty);
+
+    // sullo stesso orario (si sovrappone solo a se stesso) e' consentito
+    await backend.rescheduleAppointment(a.id, barberId: barber.id, start: target);
+
+    // orario occupato da un altro appuntamento: rifiutato
+    final other = await backend.book(barberId: barber.id, serviceId: service.id, start: start);
+    await expectLater(
+      () => backend.rescheduleAppointment(a.id, barberId: barber.id, start: other.start),
+      throwsA(isA<AppException>()),
+    );
+
+    // un altro cliente non puo' spostarlo
+    await backend.signOut();
+    await signUp('altro@test.it');
+    await expectLater(
+      () => backend.rescheduleAppointment(a.id, barberId: barber.id, start: target),
+      throwsA(isA<AppException>()),
+    );
+  });
+
+  test('scheda cliente: appuntamenti del cliente dal banco', () async {
+    await backend.signInWithEmail(DemoBackend.adminEmail, DemoBackend.adminPassword);
+    final customers = await backend.customers();
+    final walkIn = customers.firstWhere((c) => c.isWalkIn);
+    final list = await backend.customerAppointments(walkIn);
+    expect(list, isNotEmpty);
+    expect(list.every((a) => a.customerName == walkIn.fullName && a.userId == null), isTrue);
+  });
+
   test('amministratori: email aggiunta diventa admin', () async {
     await signUp('socio@test.it');
     await backend.signOut();

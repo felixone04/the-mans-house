@@ -10,17 +10,20 @@ Backend: **Supabase** (database, login, funzioni). Promemoria: **WhatsApp** (Met
 - Home a schermata unica e pulita: tasto **Prenota ora** in alto, logo al centro, in basso Indicazioni, Orari, Chiama, WhatsApp e l'indirizzo
 - Accesso/registrazione con email, Google o Apple (iCloud). Il cellulare WhatsApp è obbligatorio.
 - Prenotazione in 4 passi: servizio → barbiere (o "primo disponibile") → data e ora libere → conferma
-- Conferma, elenco appuntamenti, annullamento dall'app (fino a N ore prima, configurabile)
+- Conferma, elenco appuntamenti, spostamento e annullamento dall'app (fino a N ore prima, configurabile)
 - Promemoria WhatsApp automatici 24 ore e 1 ora prima
 - Eliminazione account (richiesta dall'App Store)
 
 **Area riservata** (solo account amministratore)
-- Agenda a calendario: una colonna per dipendente, appuntamenti posizionati per orario, fuori orario e ferie in evidenza, linea dell'ora attuale
-- Tocca un appuntamento per: promemoria WhatsApp, chiama, completato, non presentato, annulla
-- Tocca uno spazio libero per inserire un appuntamento con barbiere e orario già impostati
+- Agenda con settimana in alto (numero di appuntamenti per giorno), riepilogo del giorno e filtro per barbiere (un colore per barbiere)
+  - **Elenco** (predefinito su telefono): appuntamenti in ordine di orario, spazi liberi, blocchi e linea dell'ora attuale
+  - **Griglia** (predefinita su tablet/computer): una colonna per barbiere; su telefono scorre in verticale
+- Azioni rapide: scorri un appuntamento a destra → completato, a sinistra → non presentato (con "Annulla")
+- Tocca un appuntamento per: promemoria WhatsApp, chiama, scheda cliente, sposta, completato, non presentato, annulla
+- Tocca uno spazio libero per inserire un appuntamento; tienilo premuto (o "+" → Blocca un orario) per bloccarlo (pausa, imprevisto...). Tocca un blocco per rimuoverlo
 - Servizi: aggiungi, modifica prezzo e durata, nascondi, elimina
 - Barbieri: orari settimanali con più fasce al giorno, ferie e permessi
-- Clienti: ricerca, numero di prenotazioni, contatto rapido
+- Clienti: ricerca, numero di prenotazioni, contatto rapido; tocca un cliente per la **scheda cliente** (visite, non presentato, speso, servizio e barbiere preferiti, storico, prenota per lui)
 - Impostazioni: dati del locale, intervallo tra gli orari, giorni prenotabili, limite di annullamento, promemoria on/off, amministratori
 
 La grafica si adatta a telefono, tablet e computer senza deformarsi: il contenuto è centrato con una larghezza massima.
@@ -37,7 +40,7 @@ Se le chiavi Supabase non sono configurate, l'app parte in **modalità demo** co
 flutter run -d chrome
 ```
 
-> Flutter è installato in `C:\src\flutter\bin` (non è nel PATH: usa il percorso completo o aggiungilo al PATH).
+> Flutter è installato in `C:\src\flutter\bin` e Git in `C:\src\git\cmd` (entrambi nel PATH dell'utente).
 
 ---
 
@@ -46,6 +49,7 @@ flutter run -d chrome
 1. Crea un progetto su [supabase.com](https://supabase.com) (regione EU).
 2. In **SQL Editor** esegui, in ordine:
    - `supabase/migrations/20261010000000_init.sql` (tabelle, sicurezza, funzioni)
+   - `supabase/migrations/20261013000000_reschedule.sql` (spostamento appuntamenti)
    - `supabase/seed.sql` (servizi, 3 barbieri e orari di esempio, da modificare poi in app)
 3. Imposta l'email del titolare come amministratore:
    ```sql

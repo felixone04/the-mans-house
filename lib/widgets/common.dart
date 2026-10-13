@@ -38,11 +38,14 @@ Future<void> openWhatsApp(BuildContext context, String phone, [String text = '']
   return openUrl(context, 'https://wa.me/$number${text.isEmpty ? '' : '?text=${Uri.encodeComponent(text)}'}');
 }
 
-void showMessage(BuildContext context, String text, {bool error = false}) {
+void showMessage(BuildContext context, String text, {bool error = false, String? actionLabel, VoidCallback? onAction}) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
+        action: onAction == null
+            ? null
+            : SnackBarAction(label: actionLabel ?? 'Annulla', textColor: AppColors.white, onPressed: onAction),
         content: Row(
           children: [
             Icon(

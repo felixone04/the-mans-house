@@ -37,15 +37,19 @@ class HomeScreen extends StatelessWidget {
           child: Column(children: [
             const SizedBox(height: 8),
             Row(children: [
+              // grigio e compatto: visibile ma senza rubare la scena al logo
               FilledButton.icon(
                 onPressed: () => Navigator.of(context).push(fadeRoute(const BookingScreen())),
                 style: FilledButton.styleFrom(
-                  minimumSize: const Size(0, 44),
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-                  textStyle: GoogleFonts.exo2(fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 1.2),
+                  backgroundColor: AppColors.quiet,
+                  foregroundColor: AppColors.quietText,
+                  minimumSize: const Size(0, 36),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  side: const BorderSide(color: AppColors.quietBorder),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  textStyle: GoogleFonts.exo2(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1.1),
                 ),
-                icon: const Icon(Icons.content_cut, size: 18),
+                icon: const Icon(Icons.content_cut, size: 15),
                 label: const Text('PRENOTA ORA'),
               ),
               const Spacer(),
@@ -53,7 +57,7 @@ class HomeScreen extends StatelessWidget {
                 IconButton(
                   tooltip: 'Area riservata',
                   onPressed: () => Navigator.of(context).push(fadeRoute(const AdminScreen())),
-                  icon: const Icon(Icons.dashboard_customize_outlined),
+                  icon: const Icon(Icons.dashboard_customize_outlined, size: 20, color: AppColors.quietText),
                 ),
               _AccountButton(onTap: () => _openAccount(context)),
             ]),
@@ -116,18 +120,17 @@ class _AccountButton extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
+          width: 36,
+          height: 36,
+          decoration: const BoxDecoration(
             shape: BoxShape.circle,
-            color: signedIn ? AppColors.white : Colors.white.withValues(alpha: 0.06),
-            border: Border.all(color: Colors.white.withValues(alpha: signedIn ? 1 : 0.2)),
+            color: AppColors.quiet,
+            border: Border.fromBorderSide(BorderSide(color: AppColors.quietBorder)),
           ),
           alignment: Alignment.center,
           child: signedIn && initials != null
-              ? Text(initials, style: slab(size: 15, color: AppColors.black, weight: FontWeight.w700, spacing: 0.5))
-              : Icon(signedIn ? Icons.person : Icons.person_outline,
-                  color: signedIn ? AppColors.black : AppColors.white, size: 22),
+              ? Text(initials, style: slab(size: 12.5, color: AppColors.quietText, weight: FontWeight.w700, spacing: 0.5))
+              : Icon(signedIn ? Icons.person : Icons.person_outline, color: AppColors.quietText, size: 18),
         ),
       ),
     );

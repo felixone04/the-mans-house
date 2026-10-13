@@ -12,14 +12,30 @@ import 'booking_success_screen.dart';
 /// Prenotazione in 4 passi: servizio, barbiere, data e ora, conferma.
 /// In [adminMode] il titolare inserisce un appuntamento per un cliente
 /// (es. prenotazione telefonica).
+/// Con [reschedule] si sposta un appuntamento esistente: il servizio resta
+/// lo stesso e si sceglie solo barbiere, data e ora. Ritorna true se spostato.
 class BookingScreen extends StatefulWidget {
-  const BookingScreen({super.key, this.adminMode = false, this.initialDay, this.initialBarber, this.initialTime});
+  const BookingScreen({
+    super.key,
+    this.adminMode = false,
+    this.initialDay,
+    this.initialBarber,
+    this.initialTime,
+    this.reschedule,
+    this.initialCustomerName,
+    this.initialCustomerPhone,
+  });
   final bool adminMode;
   final DateTime? initialDay;
 
   /// Se impostato, il passo "barbiere" viene saltato.
   final Barber? initialBarber;
   final DateTime? initialTime;
+  final Appointment? reschedule;
+
+  /// Cliente gia' noto (dalla scheda cliente).
+  final String? initialCustomerName;
+  final String? initialCustomerPhone;
 
   @override
   State<BookingScreen> createState() => _BookingScreenState();
@@ -42,11 +58,31 @@ class _BookingScreenState extends State<BookingScreen> {
   bool _booking = false;
 
   final _notes = TextEditingController();
-  final _customerName = TextEditingController();
-  final _customerPhone = TextEditingController(text: '+39 ');
+  late final _customerName = TextEditingController(text: widget.initialCustomerName ?? '');
+  late final _customerPhone = TextEditingController(
+    text: (widget.initialCustomerPhone ?? '').isEmpty ? '+39 ' : widget.initialCustomerPhone,
+  );
   final _adminForm = GlobalKey<FormState>();
 
   AppState get _state => AppScope.read(context);
+
+  bool get _moving => widget.reschedule != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final a = widget.reschedule;
+    if (a != null) {
+      // servizio fisso: durata e prezzo dell'appuntamento originale
+      _service = Service(
+        id: a.serviceId ?? '',
+        name: a.serviceName,
+        durationMin: a.end.difference(a.start).inMinutes,
+        price: a.price,
+      );
+      _step = 1;
+    }
+  }
 
   @override
   void dispose() {
@@ -67,8 +103,16 @@ class _BookingScreenState extends State<BookingScreen> {
     try {
       final days = _days;
       _busy = await _state.backend.fetchBusy(days.first, days.last.add(const Duration(days: 1)));
+      final moving = widget.reschedule;
+      if (moving != null) {
+        // l'appuntamento da spostare non occupa il suo stesso orario
+        _busy = _busy!
+            .where((b) => b.timeOff || b.barberId != moving.barberId || b.start != moving.start || b.end != moving.end)
+            .toList();
+      }
       _computeAvailability();
-      final preferred = widget.initialDay == null ? null : dayOnly(widget.initialDay!);
+      final initialDay = widget.initialDay ?? moving?.start;
+      final preferred = initialDay == null ? null : dayOnly(initialDay);
       if (_day == null || (_availability[_day]?.isEmpty ?? true)) {
         _day = (preferred != null && (_availability[preferred]?.isNotEmpty ?? false))
             ? preferred
@@ -117,14 +161,37 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   void _back() {
-    if (_step == 0) {
+    if (_step == 0 || (_moving && _step == 1)) {
       Navigator.of(context).pop();
     } else {
       setState(() => _step--);
     }
   }
 
+  Future<void> _move() async {
+    final barber = _availability[_day]?[_slot];
+    if (barber == null) return;
+    setState(() => _booking = true);
+    try {
+      await _state.backend.rescheduleAppointment(widget.reschedule!.id, barberId: barber.id, start: _slot!);
+      if (!widget.adminMode) await _state.refreshAppointments();
+      if (!mounted) return;
+      showMessage(context, 'Appuntamento spostato a ${fmtDayShort(_slot!)} alle ${fmtTime(_slot!)}');
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      showError(context, e);
+      if (e.toString().contains('disponibile')) {
+        _slot = null;
+        _goTo(2);
+      }
+    } finally {
+      if (mounted) setState(() => _booking = false);
+    }
+  }
+
   Future<void> _confirm() async {
+    if (_moving) return _move();
     if (widget.adminMode) {
       if (!_adminForm.currentState!.validate()) return;
     } else {
@@ -171,12 +238,12 @@ class _BookingScreenState extends State<BookingScreen> {
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
     return PopScope(
-      canPop: _step == 0,
+      canPop: _step == 0 || (_moving && _step == 1),
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _back();
       },
       child: AppScaffold(
-        title: widget.adminMode ? 'Nuovo appuntamento' : 'Prenota',
+        title: _moving ? 'Sposta appuntamento' : (widget.adminMode ? 'Nuovo appuntamento' : 'Prenota'),
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: _back),
         body: SafeArea(
           child: Column(
@@ -187,7 +254,8 @@ class _BookingScreenState extends State<BookingScreen> {
                   steps: _steps,
                   current: _step,
                   onTap: (i) {
-                    if (i < _step) setState(() => _step = i);
+                    // spostando, il servizio non si cambia
+                    if (i < _step && !(_moving && i == 0)) setState(() => _step = i);
                   },
                 ),
               ),
@@ -494,10 +562,36 @@ class _BookingScreenState extends State<BookingScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (_moving)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.history, size: 18, color: AppColors.muted),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Prima: ${fmtDayShort(widget.reschedule!.start)} alle ${fmtTime(widget.reschedule!.start)}'
+                      '${widget.reschedule!.barberName.isEmpty ? '' : ' con ${widget.reschedule!.barberName}'}',
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 13,
+                        decoration: TextDecoration.lineThrough,
+                        decorationColor: AppColors.muted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           GlassCard(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
             child: Column(
               children: [
+                if (_moving && widget.reschedule!.customerName.isNotEmpty && widget.adminMode) ...[
+                  row(Icons.person, 'Cliente', bold(widget.reschedule!.customerName)),
+                  const Divider(),
+                ],
                 row(Icons.content_cut, 'Servizio', bold(s.name)),
                 const Divider(),
                 row(
@@ -539,7 +633,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 style: const TextStyle(color: AppColors.muted, fontSize: 12.5),
               ),
             ),
-          if (widget.adminMode) ...[
+          if (widget.adminMode && !_moving) ...[
             const SectionTitle('Cliente'),
             Form(
               key: _adminForm,
@@ -572,18 +666,20 @@ class _BookingScreenState extends State<BookingScreen> {
             ),
           ],
           const SizedBox(height: 14),
-          TextField(
-            controller: _notes,
-            maxLines: 2,
-            minLines: 1,
-            maxLength: 300,
-            decoration: const InputDecoration(
-              labelText: 'Note (facoltative)',
-              hintText: 'Es. sfumatura alta, barba corta...',
-              counterText: '',
+          if (!_moving) ...[
+            TextField(
+              controller: _notes,
+              maxLines: 2,
+              minLines: 1,
+              maxLength: 300,
+              decoration: const InputDecoration(
+                labelText: 'Note (facoltative)',
+                hintText: 'Es. sfumatura alta, barba corta...',
+                counterText: '',
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
+          ],
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -591,7 +687,9 @@ class _BookingScreenState extends State<BookingScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  widget.adminMode
+                  _moving
+                      ? 'I promemoria WhatsApp verranno inviati in base al nuovo orario.'
+                      : widget.adminMode
                       ? 'Se è indicato il cellulare, il cliente riceverà un promemoria su WhatsApp '
                             '24 ore e 1 ora prima.'
                       : 'Riceverai un promemoria su WhatsApp 24 ore e 1 ora prima. '
@@ -666,7 +764,7 @@ class _BookingScreenState extends State<BookingScreen> {
                               height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2.4, color: AppColors.black),
                             )
-                          : const Text('CONFERMA'),
+                          : Text(_moving ? 'SPOSTA' : 'CONFERMA'),
                     ),
             ),
           ],

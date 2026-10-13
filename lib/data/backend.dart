@@ -64,12 +64,19 @@ abstract class Backend {
     String? customerPhone,
   });
   Future<void> cancelAppointment(String id);
+
+  /// Sposta un appuntamento confermato (stessa durata) su un altro orario
+  /// e/o barbiere. Il cliente puo' farlo entro lo stesso limite dell'annullamento.
+  Future<void> rescheduleAppointment(String id, {required String barberId, required DateTime start});
   Future<List<Appointment>> myAppointments();
 
   // --- Area riservata ---
   Future<List<Appointment>> appointmentsBetween(DateTime from, DateTime to);
   Future<void> setAppointmentStatus(String id, AppointmentStatus status);
   Future<List<CustomerSummary>> customers();
+
+  /// Tutti gli appuntamenti di un cliente (scheda cliente), dal piu' recente.
+  Future<List<Appointment>> customerAppointments(CustomerSummary customer);
   Future<List<String>> adminEmails();
   Future<void> addAdminEmail(String email);
   Future<void> removeAdminEmail(String email);

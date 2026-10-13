@@ -4,6 +4,7 @@ import '../../models.dart';
 import '../../state/app_state.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
+import 'customer_screen.dart';
 
 class CustomersTab extends StatefulWidget {
   const CustomersTab({super.key});
@@ -70,6 +71,9 @@ class _CustomersTabState extends State<CustomersTab> {
                   GlassCard(
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.fromLTRB(16, 10, 4, 10),
+                    onTap: () => Navigator.of(context)
+                        .push(fadeRoute(CustomerScreen(customer: c)))
+                        .then((_) => _load()),
                     child: Row(children: [
                       CircleAvatar(
                         backgroundColor: AppColors.graphite,

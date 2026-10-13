@@ -363,6 +363,11 @@ class CustomerSummary {
     bookings: (j['bookings'] as num?)?.toInt() ?? 0,
     lastVisit: j['last_visit'] == null ? null : _dt(j['last_visit']),
   );
+
+  /// Cliente inserito dal banco (senza account): id "banco:" seguito dal nome.
+  bool get isWalkIn => id.startsWith(walkInPrefix);
+
+  static const walkInPrefix = 'banco:';
 }
 
 /// Normalizza un numero italiano in formato internazionale (+39...).

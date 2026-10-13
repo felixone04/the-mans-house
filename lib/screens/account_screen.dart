@@ -224,11 +224,20 @@ class _AccountScreenState extends State<AccountScreen> {
 
   Widget _tile(AppState state, Appointment a) {
     final minCancel = state.settings.minCancelHours;
+    final editable = a.start.isAfter(DateTime.now().add(Duration(hours: minCancel)));
     return _AppointmentTile(
       appointment: a,
-      onCancel: a.start.isAfter(DateTime.now().add(Duration(hours: minCancel))) ? () => _cancel(a) : null,
-      cancelHint: 'Annullabile fino a $minCancel ore prima',
+      onCancel: editable ? () => _cancel(a) : null,
+      onMove: editable ? () => _move(a) : null,
+      cancelHint: 'Modificabile fino a $minCancel ore prima',
     );
+  }
+
+  Future<void> _move(Appointment a) async {
+    // dal pannello "Vedi tutti" si chiude prima il pannello
+    final nav = Navigator.of(context);
+    if (nav.canPop() && ModalRoute.of(context)?.isCurrent == false) nav.pop();
+    await nav.push<bool>(fadeRoute(BookingScreen(reschedule: a)));
   }
 
   /// Elenco completo in un pannello dal basso (la pagina resta fissa).
@@ -260,9 +269,10 @@ class _AccountScreenState extends State<AccountScreen> {
 }
 
 class _AppointmentTile extends StatelessWidget {
-  const _AppointmentTile({required this.appointment, this.onCancel, this.cancelHint});
+  const _AppointmentTile({required this.appointment, this.onCancel, this.onMove, this.cancelHint});
   final Appointment appointment;
   final VoidCallback? onCancel;
+  final VoidCallback? onMove;
   final String? cancelHint;
 
   @override
@@ -301,10 +311,17 @@ class _AppointmentTile extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    onCancel == null ? 'Per annullare contatta il negozio' : (cancelHint ?? ''),
+                    onCancel == null ? 'Per modifiche contatta il negozio' : (cancelHint ?? ''),
                     style: const TextStyle(color: AppColors.muted, fontSize: 11.5),
                   ),
                 ),
+                if (onMove != null)
+                  TextButton.icon(
+                    onPressed: onMove,
+                    style: TextButton.styleFrom(foregroundColor: AppColors.white),
+                    icon: const Icon(Icons.edit_calendar_outlined, size: 18),
+                    label: const Text('Sposta'),
+                  ),
                 if (onCancel != null)
                   TextButton.icon(
                     onPressed: onCancel,

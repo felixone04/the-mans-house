@@ -416,6 +416,45 @@ class DemoBackend implements Backend {
   });
 
   @override
+  Future<void> rescheduleAppointment(String id, {required String barberId, required DateTime start}) async {
+    final a = _appointments.firstWhere((a) => a.id == id);
+    final me = _current;
+    // stesse regole di reschedule_appointment sul server
+    if (me == null || (!me.isAdmin && a.userId != me.id)) {
+      throw AppException('Operazione non consentita');
+    }
+    if (a.status != AppointmentStatus.confirmed) {
+      throw AppException('Appuntamento gia\' chiuso o annullato');
+    }
+    if (!me.isAdmin && a.start.isBefore(DateTime.now().add(Duration(hours: _settings.minCancelHours)))) {
+      throw AppException('Non e\' piu\' possibile spostarlo: contatta il negozio');
+    }
+    if (!me.isAdmin && start.isAfter(DateTime.now().add(Duration(days: _settings.bookingDaysAhead + 1)))) {
+      throw AppException('Data troppo lontana');
+    }
+    final barber = _barbers.firstWhere((b) => b.id == barberId && b.active,
+        orElse: () => throw AppException('Barbiere non disponibile'));
+    final duration = a.end.difference(a.start);
+    // l'appuntamento stesso non occupa l'orario in cui viene spostato
+    final busy = (await fetchBusy(dayOnly(start), dayOnly(start).add(const Duration(days: 1))))
+        .where((b) => b.timeOff || b.barberId != a.barberId || b.start != a.start || b.end != a.end)
+        .toList();
+    final ok = availableSlots(
+      barber: barber,
+      durationMin: duration.inMinutes,
+      day: start,
+      busy: busy,
+      stepMin: 1,
+    ).contains(start);
+    if (!ok) throw AppException('Orario non piu\' disponibile');
+    a
+      ..barberId = barber.id
+      ..barberName = barber.name
+      ..start = start
+      ..end = start.add(duration);
+  }
+
+  @override
   Future<List<Appointment>> myAppointments() => _delay(
     () =>
         _appointments.where((a) => a.userId != null && a.userId == _current?.id).toList()
@@ -461,7 +500,7 @@ class DemoBackend implements Backend {
       final past = list2.where((a) => a.start.isBefore(DateTime.now())).map((a) => a.start).toList()..sort();
       list.add(
         CustomerSummary(
-          id: name,
+          id: '${CustomerSummary.walkInPrefix}$name', // come admin_customers sul server
           email: '',
           fullName: name,
           phone: list2.first.customerPhone,
@@ -473,6 +512,15 @@ class DemoBackend implements Backend {
     list.sort((a, b) => a.fullName.compareTo(b.fullName));
     return list;
   });
+
+  @override
+  Future<List<Appointment>> customerAppointments(CustomerSummary c) => _delay(
+    () =>
+        _appointments
+            .where((a) => c.isWalkIn ? a.userId == null && a.customerName == c.fullName : a.userId == c.id)
+            .toList()
+          ..sort((a, b) => b.start.compareTo(a.start)),
+  );
 
   @override
   Future<List<String>> adminEmails() => _delay(() => _admins.toList()..sort());

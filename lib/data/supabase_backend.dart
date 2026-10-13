@@ -238,6 +238,16 @@ class SupabaseBackend implements Backend {
       });
 
   @override
+  Future<void> rescheduleAppointment(String id, {required String barberId, required DateTime start}) =>
+      _guard(() async {
+        await _db.rpc('reschedule_appointment', params: {
+          'p_id': id,
+          'p_barber': barberId,
+          'p_start': start.toUtc().toIso8601String(),
+        });
+      });
+
+  @override
   Future<List<Appointment>> myAppointments() => _guard(() async {
         final uid = _db.auth.currentUser?.id;
         if (uid == null) return <Appointment>[];
@@ -276,6 +286,16 @@ class SupabaseBackend implements Backend {
   Future<List<CustomerSummary>> customers() => _guard(() async {
         final rows = await _db.rpc('admin_customers') as List;
         return rows.map((r) => CustomerSummary.fromJson(r as Map<String, dynamic>)).toList();
+      });
+
+  @override
+  Future<List<Appointment>> customerAppointments(CustomerSummary c) => _guard(() async {
+        var q = _db.from('appointments').select('*, barbers(name)');
+        q = c.isWalkIn
+            ? q.isFilter('user_id', null).eq('customer_name', c.fullName)
+            : q.eq('user_id', c.id);
+        final rows = await q.order('start_at', ascending: false).limit(200);
+        return rows.map(Appointment.fromJson).toList();
       });
 
   @override
