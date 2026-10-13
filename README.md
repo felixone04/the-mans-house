@@ -16,9 +16,9 @@ Backend: **Supabase** (database, login, funzioni). Promemoria: **WhatsApp** (Met
 
 **Area riservata** (solo account amministratore)
 - Agenda con settimana in alto (numero di appuntamenti per giorno), riepilogo del giorno e filtro per barbiere (un colore per barbiere)
-  - **Elenco** (predefinito su telefono): appuntamenti in ordine di orario, spazi liberi, blocchi e linea dell'ora attuale
+  - **Corsie** (predefinita su telefono): un barbiere alla volta, si cambia scorrendo o con le schede in alto; blocchi grandi proporzionati alla durata, spazi liberi, pausa pranzo compressa, linea dell'ora attuale
   - **Griglia** (predefinita su tablet/computer): una colonna per barbiere; su telefono scorre in verticale
-- Azioni rapide: scorri un appuntamento a destra → completato, a sinistra → non presentato (con "Annulla")
+- Chiusura rapida: il tasto ✓ sugli appuntamenti iniziati li segna completati (con "Annulla")
 - Tocca un appuntamento per: promemoria WhatsApp, chiama, scheda cliente, sposta, completato, non presentato, annulla
 - Tocca uno spazio libero per inserire un appuntamento; tienilo premuto (o "+" → Blocca un orario) per bloccarlo (pausa, imprevisto...). Tocca un blocco per rimuoverlo
 - Servizi: aggiungi, modifica prezzo e durata, nascondi, elimina

@@ -5,7 +5,6 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:the_mans_house/data/demo_backend.dart';
 import 'package:the_mans_house/data/slots.dart';
-import 'package:the_mans_house/models.dart';
 import 'package:the_mans_house/screens/admin/agenda_tab.dart';
 import 'package:the_mans_house/state/app_state.dart';
 import 'package:the_mans_house/theme.dart';
@@ -57,25 +56,33 @@ void main() {
     return (state, backend);
   }
 
-  testWidgets('scorrendo a destra l\'appuntamento diventa completato', (tester) async {
-    final (_, backend) = await pumpAgenda(tester);
-    expect(find.textContaining('Libero fino alle'), findsWidgets);
-    // solo le righe degli appuntamenti (anche il messaggio in basso e' un Dismissible)
-    final swipeable = find.byWidgetPredicate(
-      (w) => w is Dismissible && w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('swipe-'),
-    );
-    final before = swipeable.evaluate().length;
-    expect(before, greaterThan(0));
+  PageController lanes(WidgetTester tester) => tester.widget<PageView>(find.byType(PageView)).controller!;
 
-    await tester.drag(swipeable.first, const Offset(300, 0));
+  testWidgets('corsie: un barbiere alla volta, si cambia scorrendo o con le schede', (tester) async {
+    final (state, _) = await pumpAgenda(tester);
+    expect(tester.takeException(), isNull);
+    expect(lanes(tester).page, 0);
+    // la prima corsia mostra solo gli appuntamenti del primo barbiere
+    expect(find.textContaining('libero'), findsWidgets);
+
+    await tester.drag(find.byType(PageView), const Offset(-300, 0));
     await settle(tester);
+    expect(lanes(tester).page, 1);
 
-    expect(find.textContaining(': completato'), findsOneWidget); // messaggio con "Annulla"
-    expect(find.text('Annulla'), findsOneWidget);
-    expect(swipeable.evaluate().length, before - 1);
-    final day = nextTuesday();
-    final items = await tester.runAsync(() => backend.appointmentsBetween(day, day.add(const Duration(days: 1))));
-    expect(items!.where((a) => a.status == AppointmentStatus.completed), isNotEmpty);
+    await tester.tap(find.text(state.barbers[2].name));
+    await settle(tester);
+    expect(lanes(tester).page, 2);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('toccando un appuntamento si apre il dettaglio con "Sposta"', (tester) async {
+    await pumpAgenda(tester);
+    final card = find.textContaining(RegExp(r'^\d\d:\d\d–\d\d:\d\d')).first;
+    await tester.ensureVisible(card);
+    await tester.tap(card);
+    await settle(tester);
+    expect(find.text('Sposta appuntamento'), findsOneWidget);
+    expect(find.text('Segna come completato'), findsOneWidget);
   });
 
   testWidgets('vista griglia su telefono: nessun errore di impaginazione', (tester) async {
@@ -83,7 +90,7 @@ void main() {
     await tester.tap(find.byTooltip('Vista griglia'));
     await settle(tester);
     expect(tester.takeException(), isNull);
-    expect(find.byTooltip('Vista elenco'), findsOneWidget);
+    expect(find.byTooltip('Vista corsie'), findsOneWidget);
     // filtro su un barbiere: resta una sola colonna
     await tester.tap(find.text('Antonio').first);
     await settle(tester);
@@ -92,7 +99,7 @@ void main() {
 
   testWidgets('tenendo premuto uno spazio libero si blocca l\'orario', (tester) async {
     await pumpAgenda(tester);
-    final gap = find.textContaining('Libero fino alle').first;
+    final gap = find.textContaining('libero').first;
     await tester.ensureVisible(gap);
     await tester.longPress(gap);
     await settle(tester);
