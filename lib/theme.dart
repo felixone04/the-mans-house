@@ -93,6 +93,13 @@ TextStyle slab({double size = 18, FontWeight weight = FontWeight.w500, Color? co
       )
     : TextStyle(fontSize: size, fontWeight: weight, color: color ?? AppColors.white, letterSpacing: spacing);
 
+/// Carattere dell'interfaccia (Exo 2); nei test il carattere predefinito.
+TextStyle exo({double? fontSize, FontWeight? fontWeight, double? letterSpacing, Color? color}) => googleFontsEnabled
+    ? GoogleFonts.exo2(fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, color: color)
+    : TextStyle(fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, color: color);
+
+TextTheme exoTextTheme(TextTheme base) => googleFontsEnabled ? GoogleFonts.exo2TextTheme(base) : base;
+
 ThemeData buildTheme() {
   final base = ThemeData(
     useMaterial3: true,
@@ -108,8 +115,7 @@ ThemeData buildTheme() {
     ),
     scaffoldBackgroundColor: AppColors.black,
   );
-  final text = GoogleFonts.exo2TextTheme(base.textTheme)
-      .apply(bodyColor: AppColors.white, displayColor: AppColors.white);
+  final text = exoTextTheme(base.textTheme).apply(bodyColor: AppColors.white, displayColor: AppColors.white);
   final radius = BorderRadius.circular(6);
   return base.copyWith(
     textTheme: text,
@@ -128,7 +134,7 @@ ThemeData buildTheme() {
         disabledBackgroundColor: AppColors.steel,
         minimumSize: const Size(64, 54),
         shape: RoundedRectangleBorder(borderRadius: radius),
-        textStyle: GoogleFonts.exo2(fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 1.2),
+        textStyle: exo(fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 1.2),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -137,13 +143,13 @@ ThemeData buildTheme() {
         minimumSize: const Size(64, 50),
         side: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
         shape: RoundedRectangleBorder(borderRadius: radius),
-        textStyle: GoogleFonts.exo2(fontSize: 15, fontWeight: FontWeight.w600),
+        textStyle: exo(fontSize: 15, fontWeight: FontWeight.w600),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: AppColors.silver,
-        textStyle: GoogleFonts.exo2(fontSize: 14, fontWeight: FontWeight.w600),
+        textStyle: exo(fontSize: 14, fontWeight: FontWeight.w600),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
@@ -170,7 +176,7 @@ ThemeData buildTheme() {
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
       backgroundColor: AppColors.graphite,
-      contentTextStyle: GoogleFonts.exo2(color: AppColors.white, fontSize: 14),
+      contentTextStyle: exo(color: AppColors.white, fontSize: 14),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
     ),
     dialogTheme: DialogThemeData(
@@ -188,19 +194,19 @@ ThemeData buildTheme() {
       backgroundColor: Colors.white.withValues(alpha: 0.05),
       selectedColor: AppColors.white,
       side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
-      labelStyle: GoogleFonts.exo2(fontWeight: FontWeight.w600),
+      labelStyle: exo(fontWeight: FontWeight.w600),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: AppColors.black,
       indicatorColor: Colors.white.withValues(alpha: 0.12),
-      labelTextStyle: WidgetStatePropertyAll(GoogleFonts.exo2(fontSize: 12, fontWeight: FontWeight.w600)),
+      labelTextStyle: WidgetStatePropertyAll(exo(fontSize: 12, fontWeight: FontWeight.w600)),
     ),
     navigationRailTheme: NavigationRailThemeData(
       backgroundColor: Colors.transparent,
       indicatorColor: Colors.white.withValues(alpha: 0.12),
-      selectedLabelTextStyle: GoogleFonts.exo2(fontWeight: FontWeight.w700, color: AppColors.white),
-      unselectedLabelTextStyle: GoogleFonts.exo2(color: AppColors.muted),
+      selectedLabelTextStyle: exo(fontWeight: FontWeight.w700, color: AppColors.white),
+      unselectedLabelTextStyle: exo(color: AppColors.muted),
     ),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith(

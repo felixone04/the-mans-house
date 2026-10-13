@@ -8,6 +8,7 @@ import '../../state/app_state.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
 import 'agenda_actions.dart';
+import 'walk_in_sheet.dart';
 
 /// Giornata di un barbiere (telefono, colori chiari): un appuntamento per
 /// scheda con orario grande, cliente e servizio. Da qui si segna se il cliente
@@ -285,12 +286,33 @@ class _BarberDayScreenState extends State<BarberDayScreen> with AgendaActions {
             ),
           ),
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          backgroundColor: AgendaLight.ink,
-          foregroundColor: Colors.white,
-          onPressed: () => newAppointment(barber: b),
-          icon: const Icon(Icons.add),
-          label: const Text('Nuovo'),
+        floatingActionButton: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FloatingActionButton(
+              heroTag: 'new',
+              tooltip: 'Nuovo appuntamento',
+              elevation: 2,
+              backgroundColor: Colors.white,
+              foregroundColor: AgendaLight.ink,
+              onPressed: () => newAppointment(barber: b),
+              child: const Icon(Icons.add),
+            ),
+            const SizedBox(width: 10),
+            // cliente senza appuntamento: primo orario libero da adesso
+            if (isToday)
+              FloatingActionButton.extended(
+                heroTag: 'walkin',
+                elevation: 2,
+                backgroundColor: AgendaLight.ink,
+                foregroundColor: Colors.white,
+                onPressed: () async {
+                  if (await showWalkInSheet(context, barber: b)) _load(silent: true);
+                },
+                icon: const Icon(Icons.login),
+                label: const Text('Entrato ora'),
+              ),
+          ],
         ),
         body: _loading
             ? const Center(child: CircularProgressIndicator(color: AgendaLight.ink))

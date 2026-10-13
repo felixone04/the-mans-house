@@ -7,7 +7,7 @@ Backend: **Supabase** (database, login, funzioni). Promemoria: **WhatsApp** (Met
 
 **Clienti**
 - Apertura con logo animato su sfondo nero sfumato
-- Home a schermata unica e pulita: tasto **Prenota ora** in alto, logo al centro, in basso Indicazioni, Orari, Chiama, WhatsApp e l'indirizzo
+- Home a schermata unica e pulita: tasto **Prenota ora** in alto, logo al centro, in basso Indicazioni, Orari, Chiama, WhatsApp, Instagram (se impostato in Impostazioni → Il locale) e l'indirizzo
 - Accesso/registrazione con email, Google o Apple (iCloud). Il cellulare WhatsApp è obbligatorio.
 - Prenotazione in 4 passi: servizio → barbiere (o "primo disponibile") → data e ora libere → conferma
 - Conferma, elenco appuntamenti, spostamento e annullamento dall'app (fino a N ore prima, configurabile)
@@ -21,6 +21,9 @@ Backend: **Supabase** (database, login, funzioni). Promemoria: **WhatsApp** (Met
 - Nella giornata del barbiere ogni appuntamento ha i pulsanti **Completato** e **Pagamento** (pagato, paga dopo, acconto con importo e resto). Se il cliente deve ancora pagare visite precedenti compare l'avviso con il **totale da pagare oggi**, e pagando si può saldare tutto insieme
 - Tocca un appuntamento per: promemoria WhatsApp, chiama, scheda cliente, sposta, completato, non presentato, annulla
 - Tocca uno spazio libero per inserire un appuntamento; tienilo premuto (o "+" → Blocca un orario) per bloccarlo (pausa, imprevisto...). Tocca un blocco per rimuoverlo
+- **Cliente entrato ora** (menu "+" dell'agenda o pulsante "Entrato ora" nella giornata del barbiere): servizio, barbiere o "primo libero", nome facoltativo → inserito nel primo orario libero da adesso
+- **Cerca** (lente in alto nell'area riservata): nome o numero → cliente con il prossimo appuntamento, tocca per la scheda cliente
+- **Esporta dati** (Impostazioni): clienti e incassi (mese, mese scorso, anno o periodo a scelta) in un file .csv per Excel, con totali per barbiere
 - Servizi: aggiungi, modifica prezzo e durata, nascondi, elimina
 - Barbieri: orari settimanali con più fasce al giorno, ferie e permessi
 - Clienti: ricerca, numero di prenotazioni, contatto rapido; tocca un cliente per la **scheda cliente** (visite, non presentato, speso, servizio e barbiere preferiti, storico, prenota per lui)

@@ -290,6 +290,42 @@ class _PolePainter extends CustomPainter {
   bool shouldRepaint(covariant _PolePainter old) => old.t != t;
 }
 
+/// Icona di Instagram (quadrato arrotondato, obiettivo e flash), disegnata
+/// perche' le icone Material non la includono.
+class InstagramIcon extends StatelessWidget {
+  const InstagramIcon({super.key, this.size = 24, this.color = AppColors.white});
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) =>
+      SizedBox.square(dimension: size, child: CustomPaint(painter: _InstagramPainter(color)));
+}
+
+class _InstagramPainter extends CustomPainter {
+  _InstagramPainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.shortestSide;
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = s * 0.085;
+    final inset = s * 0.1;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTWH(inset, inset, s - 2 * inset, s - 2 * inset), Radius.circular(s * 0.24)),
+      stroke,
+    );
+    canvas.drawCircle(Offset(s / 2, s / 2), s * 0.19, stroke);
+    canvas.drawCircle(Offset(s * 0.72, s * 0.28), s * 0.05, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(covariant _InstagramPainter old) => old.color != color;
+}
+
 /// Puntini di riempimento tra nome e prezzo, come nei listini da bottega.
 class DottedLeader extends StatelessWidget {
   const DottedLeader({super.key});

@@ -5,6 +5,7 @@ import '../../models.dart';
 import '../../state/app_state.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
+import 'export_sheet.dart';
 
 /// Informazioni del locale, regole di prenotazione, promemoria e amministratori.
 class SettingsTab extends StatefulWidget {
@@ -244,7 +245,7 @@ class _SettingsTabState extends State<SettingsTab> {
               _field('maps', 'Link Google Maps', icon: Icons.map_outlined, type: TextInputType.url),
               _field('phone', 'Telefono', icon: Icons.call_outlined, type: TextInputType.phone),
               _field('whatsapp', 'WhatsApp del negozio', icon: Icons.chat_outlined, type: TextInputType.phone),
-              _field('instagram', 'Instagram', icon: Icons.camera_alt_outlined, hint: 'nomeutente'),
+              _field('instagram', 'Instagram (mostrato nella home)', icon: Icons.camera_alt_outlined, hint: 'nomeutente'),
             ]),
           ),
           tile(
@@ -273,6 +274,12 @@ class _SettingsTabState extends State<SettingsTab> {
                       _save();
                     },
             ),
+          ),
+          tile(
+            Icons.file_download_outlined,
+            'Esporta dati',
+            'Clienti e incassi in un file per Excel (anche per il commercialista)',
+            onTap: () => showExportSheet(context),
           ),
           SectionTitle(
             'Amministratori',

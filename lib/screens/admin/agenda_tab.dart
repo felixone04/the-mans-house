@@ -8,6 +8,7 @@ import '../../theme.dart';
 import '../../widgets/common.dart';
 import 'agenda_actions.dart';
 import 'barber_day_screen.dart';
+import 'walk_in_sheet.dart';
 
 int _minuteOf(DateTime d) => d.hour * 60 + d.minute;
 
@@ -158,6 +159,11 @@ class _AgendaTabState extends State<AgendaTab> with AgendaActions {
         }),
         onNew: () => newAppointment(),
         onBlock: () => blockTime(barber: grid && shown.length == 1 ? shown.first : null),
+        onWalkIn: () async {
+          if (await showWalkInSheet(context, barber: grid && shown.length == 1 ? shown.first : null)) {
+            _load(silent: true);
+          }
+        },
       ),
     );
 
@@ -242,6 +248,7 @@ class _AgendaHeader extends StatelessWidget {
     required this.onToggleView,
     required this.onNew,
     required this.onBlock,
+    required this.onWalkIn,
   });
 
   final DateTime day;
@@ -259,6 +266,7 @@ class _AgendaHeader extends StatelessWidget {
   final VoidCallback onToggleView;
   final VoidCallback onNew;
   final VoidCallback onBlock;
+  final VoidCallback onWalkIn;
 
   bool _counts(Appointment a) => a.status != AppointmentStatus.cancelled && (filter == null || a.barberId == filter);
 
@@ -338,8 +346,21 @@ class _AgendaHeader extends StatelessWidget {
               tooltip: 'Aggiungi',
               position: PopupMenuPosition.under,
               color: AppColors.graphite,
-              onSelected: (v) => v == 0 ? onNew() : onBlock(),
+              onSelected: (v) => switch (v) {
+                0 => onNew(),
+                1 => onBlock(),
+                _ => onWalkIn(),
+              },
               itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 2,
+                  child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.login),
+                    title: Text('Cliente entrato ora'),
+                  ),
+                ),
                 PopupMenuItem(
                   value: 0,
                   child: ListTile(

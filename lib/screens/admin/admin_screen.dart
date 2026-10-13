@@ -6,6 +6,7 @@ import '../../widgets/common.dart';
 import 'agenda_tab.dart';
 import 'barbers_tab.dart';
 import 'customers_tab.dart';
+import 'search_screen.dart';
 import 'services_tab.dart';
 import 'settings_tab.dart';
 
@@ -48,10 +49,19 @@ class _AdminScreenState extends State<AdminScreen> {
 
     final width = MediaQuery.sizeOf(context).width;
     final wide = width >= 900;
+    // ricerca veloce clienti, sempre a portata da ogni sezione
+    final actions = [
+      IconButton(
+        tooltip: 'Cerca cliente',
+        icon: const Icon(Icons.search),
+        onPressed: () => Navigator.of(context).push(fadeRoute(const SearchScreen())),
+      ),
+    ];
 
     if (wide) {
       return AppScaffold(
         title: 'Area riservata',
+        actions: actions,
         body: SafeArea(
           child: Row(children: [
             NavigationRail(
@@ -76,6 +86,7 @@ class _AdminScreenState extends State<AdminScreen> {
 
     return AppScaffold(
       title: _destinations[_index].$3,
+      actions: actions,
       body: SafeArea(bottom: false, child: _tab()),
       bottom: NavigationBar(
         selectedIndex: _index,
