@@ -151,6 +151,9 @@ class _StatusPill extends StatelessWidget {
                 style: const TextStyle(color: AppColors.white, fontSize: 12.5, fontWeight: FontWeight.w700),
               ),
             ),
+            // toccando si aprono gli orari della settimana
+            const SizedBox(width: 2),
+            const Icon(Icons.expand_more, size: 18, color: AppColors.white),
           ],
         ),
       ),
@@ -306,8 +309,8 @@ void showHoursSheet(BuildContext context, List<Barber> barbers) {
   );
 }
 
-/// Scorciatoie a riquadri chiari: Prodotti, Orari, Chiama, WhatsApp, Instagram.
-/// (L'indirizzo e' gia' in fondo e porta alla mappa.)
+/// Scorciatoie a riquadri chiari: Prodotti, Chiama, WhatsApp, Instagram.
+/// (Gli orari si aprono toccando lo stato in alto; l'indirizzo in fondo porta alla mappa.)
 class _QuickActions extends StatelessWidget {
   const _QuickActions({required this.settings, required this.barbers});
   final ShopSettings settings;
@@ -318,22 +321,21 @@ class _QuickActions extends StatelessWidget {
     const icon = AppColors.white; // nero come le lettere dell'insegna
     final actions = <(Widget, String, VoidCallback)>[
       (
-        const Icon(Icons.shopping_bag_outlined, size: 22, color: icon),
+        const Icon(Icons.shopping_bag_outlined, size: 27, color: icon),
         'Prodotti',
         () => Navigator.of(context).push(fadeRoute(const ProductsScreen())),
       ),
-      (const Icon(Icons.schedule, size: 22, color: icon), 'Orari', () => showHoursSheet(context, barbers)),
       if (settings.phone.isNotEmpty)
-        (const Icon(Icons.call_outlined, size: 22, color: icon), 'Chiama', () => callPhone(context, settings.phone)),
+        (const Icon(Icons.call_outlined, size: 27, color: icon), 'Chiama', () => callPhone(context, settings.phone)),
       if (settings.whatsapp.isNotEmpty)
         (
-          const Icon(Icons.chat_outlined, size: 22, color: icon),
+          const Icon(Icons.chat_outlined, size: 27, color: icon),
           'WhatsApp',
           () => openWhatsApp(context, settings.whatsapp),
         ),
       if (settings.instagram.isNotEmpty)
         (
-          const InstagramIcon(size: 22, color: icon),
+          const InstagramIcon(size: 27, color: icon),
           'Instagram',
           () => openUrl(context, 'https://instagram.com/${settings.instagram.replaceAll('@', '')}'),
         ),
@@ -342,7 +344,7 @@ class _QuickActions extends StatelessWidget {
     return Row(
       children: [
         for (var i = 0; i < actions.length; i++) ...[
-          if (i > 0) const SizedBox(width: 8),
+          if (i > 0) const SizedBox(width: 10),
           Expanded(
             child: Material(
               color: Colors.white.withValues(alpha: 0.55),
@@ -354,11 +356,11 @@ class _QuickActions extends StatelessWidget {
               child: InkWell(
                 onTap: actions[i].$3,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  padding: const EdgeInsets.symmetric(vertical: 18),
                   child: Column(
                     children: [
                       actions[i].$1,
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       // su telefoni stretti l'etichetta si riduce invece di andare a capo
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 3),
@@ -367,7 +369,7 @@ class _QuickActions extends StatelessWidget {
                           child: Text(
                             actions[i].$2,
                             maxLines: 1,
-                            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: AppColors.white),
+                            style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppColors.white),
                           ),
                         ),
                       ),
