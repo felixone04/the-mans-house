@@ -483,12 +483,12 @@ class _WeekDay extends StatelessWidget {
       sub = selected ? const Color(0xFFCFCFCF) : AgendaLight.sub;
     } else {
       fg = selected ? AppColors.black : (open ? AppColors.white : AppColors.muted);
-      bg = selected ? AppColors.white : Colors.white.withValues(alpha: open ? 0.05 : 0.015);
+      bg = selected ? AppColors.white : AppColors.white.withValues(alpha: open ? 0.05 : 0.015);
       border = selected
           ? AppColors.white
           : today
           ? AppColors.silver.withValues(alpha: 0.7)
-          : Colors.white.withValues(alpha: 0.08);
+          : AppColors.white.withValues(alpha: 0.08);
       sub = selected ? const Color(0xFF555555) : AppColors.silver;
     }
     return InkWell(
@@ -807,7 +807,7 @@ class _DayCalendarState extends State<_DayCalendar> {
                               right: 0,
                               child: Container(
                                 height: 1,
-                                color: Colors.white.withValues(alpha: m % 60 == 0 ? 0.10 : 0.04),
+                                color: AppColors.white.withValues(alpha: m % 60 == 0 ? 0.10 : 0.04),
                               ),
                             ),
                           for (var m = range.$1; m < range.$2; m += 60)
@@ -906,9 +906,9 @@ class _DayCalendarState extends State<_DayCalendar> {
       },
       child: Container(
         decoration: BoxDecoration(
-          border: Border(left: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
+          border: Border(left: BorderSide(color: AppColors.white.withValues(alpha: 0.06))),
           // fuori orario: sfondo scuro
-          color: Colors.black.withValues(alpha: 0.35),
+          color: AppColors.white.withValues(alpha: 0.10),
         ),
         child: Stack(
           children: [
@@ -919,7 +919,7 @@ class _DayCalendarState extends State<_DayCalendar> {
                 height: (h.end - h.start) * ppm,
                 left: 0,
                 right: 0,
-                child: Container(color: Colors.white.withValues(alpha: 0.035)),
+                child: Container(color: Colors.white.withValues(alpha: 0.35)),
               ),
             // Ferie / permessi / blocchi: toccando si possono rimuovere
             for (final t in off)
@@ -983,8 +983,8 @@ class _AppointmentBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final a = appointment;
     final (bg, fg, sub) = switch (a.status) {
-      AppointmentStatus.confirmed => (const Color(0xFF2A2A2A), AppColors.white, AppColors.silver),
-      AppointmentStatus.completed => (const Color(0xFF1A1A1A), AppColors.silver, AppColors.muted),
+      AppointmentStatus.confirmed => (Colors.white.withValues(alpha: 0.85), AppColors.white, AppColors.silver),
+      AppointmentStatus.completed => (Colors.white.withValues(alpha: 0.4), AppColors.silver, AppColors.muted),
       AppointmentStatus.noShow => (AppColors.warning.withValues(alpha: 0.16), AppColors.white, AppColors.silver),
       AppointmentStatus.cancelled => (AppColors.graphite, AppColors.muted, AppColors.muted),
     };

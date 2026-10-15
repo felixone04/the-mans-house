@@ -3,33 +3,45 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'models.dart';
 
-/// Palette: nero sfumato al grigio, accenti bianco/argento.
+/// Palette del nuovo logo: muro grigio ardesia (#778899) e lettere nere.
+/// I nomi sono quelli storici dell'app (era scura): [white] e' il colore del
+/// testo e degli elementi in primo piano (ora nero), [black] il colore
+/// "rovesciato" (testo sui pulsanti pieni, superfici chiare).
 class AppColors {
-  static const black = Color(0xFF0A0A0A);
-  static const charcoal = Color(0xFF161616);
-  static const graphite = Color(0xFF242424);
-  static const steel = Color(0xFF353535);
-  static const silver = Color(0xFFBDBDBD);
-  static const muted = Color(0xFF8E8E8E);
-  static const white = Color(0xFFEDE8DF); // avorio: tono caldo da insegna vintage
-  static const success = Color(0xFF7BC98F);
-  static const danger = Color(0xFFE57373);
-  static const warning = Color(0xFFE0B862);
+  static const black = Color(0xFFF4F3F0); // superficie chiara / testo sui pulsanti neri
+  static const charcoal = Color(0xFFECEAE6); // finestre e pannelli
+  static const graphite = Color(0xFFDCDAD5);
+  static const steel = Color(0xFFC6C4BF);
+  static const silver = Color(0xFF1E252C); // testo secondario (leggibile sul grigio)
+  static const muted = Color(0xFF2E3740); // testo di dettaglio
+  static const white = Color(0xFF141414); // inchiostro: lettere dell'insegna
+  static const success = Color(0xFF145C35);
+  static const danger = Color(0xFF9E1F18);
+  static const warning = Color(0xFF6B3F00);
+
+  /// Muro: grigio scelto dal titolare (#778899). [concreteLit] e' la zona
+  /// illuminata attorno alla scritta, [concreteEdge] i bordi in ombra.
+  static const concrete = Color(0xFF778899);
+  static const concreteLit = Color(0xFF8C9AA9);
+  static const concreteTop = Color(0xFF7E8E9F);
+  static const concreteBottom = Color(0xFF718293);
+  static const concreteEdge = Color(0xFF586676);
 
   static const backgroundGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [black, charcoal, Color(0xFF2B2B2B)],
-    stops: [0, 0.55, 1],
+    colors: [concreteTop, concrete, concreteBottom],
+    stops: [0, 0.5, 1],
   );
 
-  static Color card = Colors.white.withValues(alpha: 0.05);
-  static Color cardBorder = Colors.white.withValues(alpha: 0.10);
+  /// Riquadri: chiari e leggermente trasparenti sul cemento.
+  static Color card = Colors.white.withValues(alpha: 0.55);
+  static Color cardBorder = const Color(0xFF141414).withValues(alpha: 0.14);
 
-  /// Pulsanti discreti in grigio (home: prenota e account).
-  static const quiet = Color(0xFF262626);
-  static const quietBorder = Color(0xFF3A3A3A);
-  static const quietText = Color(0xFFD6D6D6);
+  /// Pulsanti discreti (home: prenota e account): neri come le lettere.
+  static const quiet = Color(0xFF141414);
+  static const quietBorder = Color(0xFF141414);
+  static const quietText = Color(0xFFF1F0ED);
 
   /// Un colore per barbiere in agenda (toni smorzati, leggibili sul nero).
   static const barberPalette = [
@@ -83,28 +95,36 @@ Color barberColor(List<Barber> barbers, String barberId) {
 /// Nei test i caratteri non si scaricano: si usa il carattere predefinito.
 bool googleFontsEnabled = true;
 
-TextStyle slab({double size = 18, FontWeight weight = FontWeight.w500, Color? color, double spacing = 1.2}) =>
-    googleFontsEnabled
-    ? GoogleFonts.robotoSlab(
-        fontSize: size,
-        fontWeight: weight,
-        color: color ?? AppColors.white,
-        letterSpacing: spacing,
-      )
-    : TextStyle(fontSize: size, fontWeight: weight, color: color ?? AppColors.white, letterSpacing: spacing);
+/// Titoli nel carattere dell'insegna (Montserrat, molto spesso).
+/// Il peso richiesto viene irrobustito: le lettere del logo sono "black".
+TextStyle slab({double size = 18, FontWeight weight = FontWeight.w500, Color? color, double spacing = 1.2}) {
+  final heavy = weight.value >= 700
+      ? FontWeight.w900
+      : weight.value >= 600
+      ? FontWeight.w800
+      : FontWeight.w700;
+  return googleFontsEnabled
+      ? GoogleFonts.montserrat(
+          fontSize: size,
+          fontWeight: heavy,
+          color: color ?? AppColors.white,
+          letterSpacing: spacing * 0.6,
+        )
+      : TextStyle(fontSize: size, fontWeight: heavy, color: color ?? AppColors.white, letterSpacing: spacing * 0.6);
+}
 
-/// Carattere dell'interfaccia (Exo 2); nei test il carattere predefinito.
+/// Carattere dell'interfaccia (Montserrat); nei test il carattere predefinito.
 TextStyle exo({double? fontSize, FontWeight? fontWeight, double? letterSpacing, Color? color}) => googleFontsEnabled
-    ? GoogleFonts.exo2(fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, color: color)
+    ? GoogleFonts.montserrat(fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, color: color)
     : TextStyle(fontSize: fontSize, fontWeight: fontWeight, letterSpacing: letterSpacing, color: color);
 
-TextTheme exoTextTheme(TextTheme base) => googleFontsEnabled ? GoogleFonts.exo2TextTheme(base) : base;
+TextTheme exoTextTheme(TextTheme base) => googleFontsEnabled ? GoogleFonts.montserratTextTheme(base) : base;
 
 ThemeData buildTheme() {
   final base = ThemeData(
     useMaterial3: true,
-    brightness: Brightness.dark,
-    colorScheme: const ColorScheme.dark(
+    brightness: Brightness.light,
+    colorScheme: const ColorScheme.light(
       primary: AppColors.white,
       onPrimary: AppColors.black,
       secondary: AppColors.silver,
@@ -141,7 +161,7 @@ ThemeData buildTheme() {
       style: OutlinedButton.styleFrom(
         foregroundColor: AppColors.white,
         minimumSize: const Size(64, 50),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.25)),
+        side: BorderSide(color: AppColors.white.withValues(alpha: 0.55)),
         shape: RoundedRectangleBorder(borderRadius: radius),
         textStyle: exo(fontSize: 15, fontWeight: FontWeight.w600),
       ),
@@ -154,7 +174,7 @@ ThemeData buildTheme() {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: Colors.white.withValues(alpha: 0.06),
+      fillColor: Colors.white.withValues(alpha: 0.5),
       labelStyle: const TextStyle(color: AppColors.muted),
       floatingLabelStyle: const TextStyle(color: AppColors.silver),
       prefixIconColor: AppColors.muted,
@@ -162,7 +182,7 @@ ThemeData buildTheme() {
       border: OutlineInputBorder(borderRadius: radius, borderSide: BorderSide.none),
       enabledBorder: OutlineInputBorder(
         borderRadius: radius,
-        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        borderSide: BorderSide(color: AppColors.white.withValues(alpha: 0.16)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: radius,
@@ -189,22 +209,22 @@ ThemeData buildTheme() {
       showDragHandle: true,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(14))),
     ),
-    dividerTheme: DividerThemeData(color: Colors.white.withValues(alpha: 0.08), space: 1),
+    dividerTheme: DividerThemeData(color: AppColors.white.withValues(alpha: 0.16), space: 1),
     chipTheme: ChipThemeData(
-      backgroundColor: Colors.white.withValues(alpha: 0.05),
+      backgroundColor: Colors.white.withValues(alpha: 0.4),
       selectedColor: AppColors.white,
-      side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+      side: BorderSide(color: AppColors.white.withValues(alpha: 0.25)),
       labelStyle: exo(fontWeight: FontWeight.w600),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: AppColors.black,
-      indicatorColor: Colors.white.withValues(alpha: 0.12),
+      indicatorColor: AppColors.white.withValues(alpha: 0.12),
       labelTextStyle: WidgetStatePropertyAll(exo(fontSize: 12, fontWeight: FontWeight.w600)),
     ),
     navigationRailTheme: NavigationRailThemeData(
       backgroundColor: Colors.transparent,
-      indicatorColor: Colors.white.withValues(alpha: 0.12),
+      indicatorColor: AppColors.white.withValues(alpha: 0.12),
       selectedLabelTextStyle: exo(fontWeight: FontWeight.w700, color: AppColors.white),
       unselectedLabelTextStyle: exo(color: AppColors.muted),
     ),

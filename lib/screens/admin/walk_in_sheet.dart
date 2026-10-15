@@ -186,7 +186,7 @@ class _WalkInSheetState extends State<_WalkInSheet> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.06),
+                color: Colors.white.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: AppColors.quietBorder),
               ),

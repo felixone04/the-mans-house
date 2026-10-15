@@ -30,6 +30,9 @@ class HomeScreen extends StatelessWidget {
     final next = state.nextAppointment;
 
     return AppScaffold(
+      spotlight: true,
+      // sfondo a tutto schermo; contenuti della stessa misura e al centro
+      // su ogni dispositivo (come con il logo precedente)
       body: SafeArea(
         child: ResponsiveCenter(
           maxWidth: 560,
@@ -58,7 +61,7 @@ class HomeScreen extends StatelessWidget {
                     IconButton(
                       tooltip: 'Area riservata',
                       onPressed: () => Navigator.of(context).push(fadeRoute(const AdminScreen())),
-                      icon: const Icon(Icons.dashboard_customize_outlined, size: 20, color: AppColors.quietText),
+                      icon: const Icon(Icons.dashboard_customize_outlined, size: 20, color: AppColors.white),
                     ),
                   _AccountButton(onTap: () => _openAccount(context)),
                 ],
@@ -66,7 +69,9 @@ class HomeScreen extends StatelessWidget {
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, c) {
-                    final logoH = (c.maxHeight * 0.55).clamp(140.0, 340.0);
+                    // la scritta occupa la colonna centrale (max 560 px): stessa
+                    // misura su tablet, computer e TV, con lo sfondo a tutto schermo
+                    final logoH = (c.maxWidth * 0.6).clamp(160.0, 560.0);
                     return Center(
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
@@ -75,15 +80,7 @@ class HomeScreen extends StatelessWidget {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              AppLogo(height: logoH),
-                              const SizedBox(height: 18),
-                              const Ornament(width: 200),
-                              const SizedBox(height: 12),
-                              Text(
-                                s.tagline.toUpperCase(),
-                                textAlign: TextAlign.center,
-                                style: slab(size: 12, color: AppColors.silver, spacing: 4),
-                              ),
+                              AppLogo(height: logoH, subtitle: s.tagline),
                               if (next != null) ...[
                                 const SizedBox(height: 28),
                                 _NextAppointmentCard(appointment: next),
@@ -101,12 +98,7 @@ class HomeScreen extends StatelessWidget {
               Text(
                 s.address.toUpperCase(),
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.muted,
-                  fontSize: 11.5,
-                  letterSpacing: 2.2,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: exo(color: AppColors.white, fontSize: 11.5, letterSpacing: 1.6, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 14),
             ],
@@ -173,14 +165,19 @@ void showHoursSheet(BuildContext context, List<Barber> barbers) {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (special.isNotEmpty) ...[
-              Text('CHIUSURE E ORARI SPECIALI', style: slab(size: 14, weight: FontWeight.w600, color: AppColors.warning)),
+              Text(
+                'CHIUSURE E ORARI SPECIALI',
+                style: slab(size: 14, weight: FontWeight.w600, color: AppColors.warning),
+              ),
               const SizedBox(height: 10),
               for (final d in special)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 5),
                   child: Row(
                     children: [
-                      Expanded(child: Text(fmtDayShort(d.day), style: const TextStyle(fontWeight: FontWeight.w700))),
+                      Expanded(
+                        child: Text(fmtDayShort(d.day), style: const TextStyle(fontWeight: FontWeight.w700)),
+                      ),
                       Text(
                         d.closed
                             ? 'Chiuso${d.note.isEmpty ? '' : ' · ${d.note}'}'
@@ -237,7 +234,7 @@ class _QuickActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const icon = Color(0xFFEDE8DF);
+    const icon = AppColors.white; // nero come le lettere dell'insegna
     final actions = <(Widget, String, VoidCallback)>[
       (
         const Icon(Icons.near_me_outlined, size: 21, color: icon),
@@ -265,14 +262,14 @@ class _QuickActions extends StatelessWidget {
     // Unica barra incorniciata con separatori sottili: piu' pulita di 4 riquadri
     return Container(
       decoration: BoxDecoration(
-        border: Border.symmetric(horizontal: BorderSide(color: AppColors.white.withValues(alpha: 0.18))),
+        border: const Border.symmetric(horizontal: BorderSide(color: AppColors.white, width: 1.5)),
       ),
       child: IntrinsicHeight(
         child: Row(
           children: [
             for (var i = 0; i < actions.length; i++) ...[
               if (i > 0)
-                VerticalDivider(width: 1, indent: 14, endIndent: 14, color: AppColors.white.withValues(alpha: 0.14)),
+                VerticalDivider(width: 1, indent: 14, endIndent: 14, color: AppColors.white.withValues(alpha: 0.35)),
               Expanded(
                 child: InkWell(
                   onTap: actions[i].$3,
@@ -292,9 +289,9 @@ class _QuickActions extends StatelessWidget {
                               maxLines: 1,
                               style: const TextStyle(
                                 fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1.2,
-                                color: AppColors.silver,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1,
+                                color: AppColors.white,
                               ),
                             ),
                           ),

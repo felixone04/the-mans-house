@@ -55,3 +55,7 @@ config.json
 qr-anteprima.png
 grafica-prima-dopo.png
 qr-online.png
+
+# Anteprime grafiche locali (usano i caratteri installati su questo PC)
+test/zz_*_test.dart
+test/failures/

@@ -11,6 +11,7 @@ import 'data/supabase_backend.dart';
 import 'screens/splash_screen.dart';
 import 'state/app_state.dart';
 import 'theme.dart';
+import 'widgets/common.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,9 +19,9 @@ Future<void> main() async {
   Intl.defaultLocale = 'it_IT';
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
+    statusBarIconBrightness: Brightness.dark, // icone scure sul cemento
     systemNavigationBarColor: AppColors.black,
-    systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarIconBrightness: Brightness.dark,
   ));
 
   final Backend backend = AppConfig.hasSupabase ? SupabaseBackend() : DemoBackend();
@@ -40,6 +41,7 @@ class BarberApp extends StatelessWidget {
           title: "The Man's House",
           debugShowCheckedModeBanner: false,
           theme: buildTheme(),
+          scrollBehavior: const AppScrollBehavior(),
           locale: const Locale('it', 'IT'),
           supportedLocales: const [Locale('it', 'IT')],
           localizationsDelegates: const [

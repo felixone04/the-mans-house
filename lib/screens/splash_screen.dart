@@ -47,38 +47,28 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final logoHeight = (size.shortestSide * 0.62).clamp(180.0, 360.0);
+    // stessa misura della scritta in home: il passaggio alla home e' continuo
+    final logoHeight = ((size.width - 40).clamp(0.0, 520.0) * 0.6).clamp(160.0, 560.0);
     final fade = CurvedAnimation(parent: _anim, curve: const Interval(0, 0.7, curve: Curves.easeOut));
-    final scale = Tween(begin: 0.92, end: 1.0)
-        .animate(CurvedAnimation(parent: _anim, curve: const Interval(0, 0.9, curve: Curves.easeOutCubic)));
-    final line = CurvedAnimation(parent: _anim, curve: const Interval(0.45, 1, curve: Curves.easeInOut));
+    final scale = Tween(
+      begin: 0.96,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _anim, curve: const Interval(0, 0.9, curve: Curves.easeOutCubic)));
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0, -0.2),
-            radius: 1.1,
-            colors: [Color(0xFF2E2E2E), AppColors.charcoal, AppColors.black],
-            stops: [0, 0.5, 1],
-          ),
-        ),
+      body: AppBackground(
+        spotlight: true,
         child: Center(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             FadeTransition(
               opacity: fade,
-              child: ScaleTransition(scale: scale, child: AppLogo(height: logoHeight)),
-            ),
-            const SizedBox(height: 22),
-            FadeTransition(
-              opacity: line,
-              child: Column(children: [
-                const Ornament(width: 200),
-                const SizedBox(height: 12),
-                Text('BARBER SHOP · ANDRIA', style: slab(size: 12, color: AppColors.muted, spacing: 4)),
-                const SizedBox(height: 34),
-                const BarberPole(width: 120, height: 7),
-              ]),
+              child: ScaleTransition(
+                scale: scale,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: AppLogo(height: logoHeight, subtitle: 'Barber Shop · Andria'),
+                ),
+              ),
             ),
             if (_failed) ...[
               const SizedBox(height: 32),

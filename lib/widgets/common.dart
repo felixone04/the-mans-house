@@ -95,32 +95,22 @@ Future<bool> confirmDialog(
 // Layout
 // ---------------------------------------------------------------------------
 
-/// Sfondo nero sfumato al grigio usato in tutta l'app.
+/// Sfondo di cemento come il muro del logo, usato in tutta l'app.
+/// Con [spotlight] (home, apertura) la luce cade sulla scritta e i bordi
+/// restano in ombra, come nella foto dell'insegna.
 class AppBackground extends StatelessWidget {
-  const AppBackground({super.key, required this.child});
+  const AppBackground({super.key, required this.child, this.spotlight = false});
   final Widget child;
+  final bool spotlight;
 
   @override
   Widget build(BuildContext context) => Container(
-    decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
+    color: AppColors.concreteBottom,
     child: Stack(
       fit: StackFit.expand,
       children: [
-        // vignettatura + grana leggera, come una parete di bottega
-        const IgnorePointer(
-          child: RepaintBoundary(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: Alignment(0, -0.35),
-                  radius: 1.15,
-                  colors: [Color(0x0FFFFFFF), Color(0x00000000), Color(0x66000000)],
-                  stops: [0, 0.55, 1],
-                ),
-              ),
-              child: CustomPaint(painter: _GrainPainter.instance),
-            ),
-          ),
+        IgnorePointer(
+          child: RepaintBoundary(child: CustomPaint(painter: _ConcretePainter(spotlight: spotlight))),
         ),
         child,
       ],
@@ -128,26 +118,87 @@ class AppBackground extends StatelessWidget {
   );
 }
 
-class _GrainPainter extends CustomPainter {
-  const _GrainPainter();
-  static const instance = _GrainPainter();
+/// Muro di cemento a pannelli: grigio caldo, giunture tra i pannelli,
+/// grana fine e qualche poro, piu' la luce (zona chiara) dall'alto.
+class _ConcretePainter extends CustomPainter {
+  const _ConcretePainter({required this.spotlight});
+  final bool spotlight;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    // base: grigio ardesia #778899
+    canvas.drawRect(rect, Paint()..shader = AppColors.backgroundGradient.createShader(rect));
+
+    // luce: piu' ampia e decisa sulla home, morbida nelle altre pagine
+    final light = RadialGradient(
+      center: spotlight ? const Alignment(0.1, -0.12) : const Alignment(0.35, -0.9),
+      radius: spotlight ? 1.0 : 1.1,
+      // tre passaggi: la luce sfuma senza un bordo netto
+      colors: spotlight
+          ? [
+              AppColors.concreteLit.withValues(alpha: 0.95),
+              AppColors.concreteLit.withValues(alpha: 0.5),
+              AppColors.concreteLit.withValues(alpha: 0),
+            ]
+          : [Colors.white.withValues(alpha: 0.10), Colors.white.withValues(alpha: 0.04), Colors.white.withValues(alpha: 0)],
+      stops: const [0, 0.5, 1],
+    );
+    canvas.drawRect(rect, Paint()..shader = light.createShader(rect));
+
+    // bordi in ombra come nella foto
+    final vignette = RadialGradient(
+      center: Alignment.center,
+      radius: 1.05,
+      colors: [
+        Colors.transparent,
+        AppColors.concreteEdge.withValues(alpha: spotlight ? 0.3 : 0.1),
+        AppColors.concreteEdge.withValues(alpha: spotlight ? 0.75 : 0.25),
+      ],
+      stops: const [0.45, 0.75, 1],
+    );
+    canvas.drawRect(rect, Paint()..shader = vignette.createShader(rect));
+
+    // giunture dei pannelli (casseforme): linee sottili verticali e una orizzontale
+    final seam = Paint()
+      ..color = const Color(0xFF2F3A45).withValues(alpha: spotlight ? 0.22 : 0.12)
+      ..strokeWidth = 1;
+    final highlight = Paint()
+      ..color = Colors.white.withValues(alpha: 0.10)
+      ..strokeWidth = 1;
+    const panel = 260.0; // larghezza di un pannello in pixel logici
+    for (var x = size.width * 0.19; x < size.width; x += panel) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), seam);
+      canvas.drawLine(Offset(x + 1, 0), Offset(x + 1, size.height), highlight);
+    }
+    final y = size.height * 0.19;
+    canvas.drawLine(Offset(0, y), Offset(size.width, y), seam);
+    canvas.drawLine(Offset(0, y + 1), Offset(size.width, y + 1), highlight);
+
+    // grana fine e pori (sempre uguali: niente sfarfallio ai ridisegni)
     final rnd = Random(11);
-    final light = Paint()..color = const Color(0x09FFFFFF);
-    final dark = Paint()..color = const Color(0x12000000);
-    final count = (size.width * size.height / 90).clamp(0, 30000).toInt();
+    final light1 = Paint()..color = Colors.white.withValues(alpha: 0.07);
+    final dark1 = Paint()..color = Colors.black.withValues(alpha: 0.07);
+    final count = (size.width * size.height / 60).clamp(0, 40000).toInt();
     for (var i = 0; i < count; i++) {
       canvas.drawRect(
         Rect.fromLTWH(rnd.nextDouble() * size.width, rnd.nextDouble() * size.height, 1, 1),
-        i.isEven ? light : dark,
+        i.isEven ? light1 : dark1,
+      );
+    }
+    final pore = Paint()..color = const Color(0xFF2A3440).withValues(alpha: 0.22);
+    final pores = (size.width * size.height / 9000).clamp(0, 400).toInt();
+    for (var i = 0; i < pores; i++) {
+      canvas.drawCircle(
+        Offset(rnd.nextDouble() * size.width, rnd.nextDouble() * size.height),
+        0.6 + rnd.nextDouble() * 1.4,
+        pore,
       );
     }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _ConcretePainter old) => old.spotlight != spotlight;
 }
 
 /// Divisore decorativo: linea — forbici — linea.
@@ -366,10 +417,8 @@ class ServiceIcon extends StatelessWidget {
     final fg = selected ? AppColors.black : AppColors.white;
     Widget icon;
     if (n.contains('barba') || n.contains('beard')) {
-      icon = ColorFiltered(
-        colorFilter: ColorFilter.mode(fg, BlendMode.srcIn),
-        child: Image.asset('assets/images/logo_mark.png', width: size * 0.62),
-      );
+      // prima era il vecchio logo con la barba: ora un'icona coerente con le altre
+      icon = Icon(Icons.face_retouching_natural_outlined, size: size * 0.48, color: fg);
     } else {
       final data = n.contains('bambin')
           ? Icons.child_care_outlined
@@ -388,7 +437,7 @@ class ServiceIcon extends StatelessWidget {
       decoration: square
           ? BoxDecoration(
               borderRadius: BorderRadius.circular(size * 0.2),
-              color: selected ? AppColors.white : AppColors.white.withValues(alpha: 0.07),
+              color: selected ? AppColors.white : AppColors.white.withValues(alpha: 0.06),
               border: Border.all(color: AppColors.white.withValues(alpha: selected ? 1 : 0.12)),
             )
           : BoxDecoration(
@@ -489,6 +538,7 @@ class AppScaffold extends StatelessWidget {
     this.bottom,
     this.floatingActionButton,
     this.leading,
+    this.spotlight = false,
   });
 
   final String? title;
@@ -498,8 +548,12 @@ class AppScaffold extends StatelessWidget {
   final Widget? floatingActionButton;
   final Widget? leading;
 
+  /// Luce sul muro come nella foto del logo (home).
+  final bool spotlight;
+
   @override
   Widget build(BuildContext context) => AppBackground(
+    spotlight: spotlight,
     child: Scaffold(
       backgroundColor: Colors.transparent,
       appBar: title == null && actions == null
@@ -534,7 +588,7 @@ class GlassCard extends StatelessWidget {
     return Padding(
       padding: margin ?? EdgeInsets.zero,
       child: Material(
-        color: selected ? Colors.white.withValues(alpha: 0.12) : AppColors.card,
+        color: selected ? AppColors.white.withValues(alpha: 0.12) : AppColors.card,
         shape: RoundedRectangleBorder(
           borderRadius: radius,
           side: BorderSide(color: selected ? AppColors.white : AppColors.cardBorder, width: selected ? 1.4 : 1),
@@ -605,20 +659,45 @@ class SectionTitle extends StatelessWidget {
   );
 }
 
+/// Logo: la scritta dell'insegna in lettere nere nette (Montserrat Black).
+/// [markOnly]: versione compatta "TMH" per spazi piccoli.
+/// [subtitle]: riga sotto la scritta (es. "BARBER SHOP · ANDRIA").
 class AppLogo extends StatelessWidget {
-  const AppLogo({super.key, this.height = 160, this.markOnly = false});
+  const AppLogo({super.key, this.height = 160, this.markOnly = false, this.subtitle, this.color});
   final double height;
   final bool markOnly;
+  final String? subtitle;
+  final Color? color;
 
   @override
-  Widget build(BuildContext context) => Image.asset(
-    markOnly ? 'assets/images/logo_mark.png' : 'assets/images/logo_full.png',
-    height: height,
-    fit: BoxFit.contain,
-    filterQuality: FilterQuality.high,
-    color: AppColors.white, // logo in avorio, coerente con i testi
-    colorBlendMode: BlendMode.srcIn,
-  );
+  Widget build(BuildContext context) {
+    final ink = color ?? AppColors.white;
+    if (markOnly) {
+      return Text('TMH', style: slab(size: height * 0.42, weight: FontWeight.w900, color: ink, spacing: -0.5));
+    }
+    // la scritta occupa la larghezza disponibile; [height] ne fissa la scala
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            "THE MAN'S HOUSE",
+            maxLines: 1,
+            style: slab(size: height * 0.22, weight: FontWeight.w900, color: ink, spacing: -0.4),
+          ),
+          if (subtitle != null && subtitle!.isNotEmpty) ...[
+            SizedBox(height: height * 0.07),
+            Text(
+              subtitle!.toUpperCase(),
+              maxLines: 1,
+              style: slab(size: height * 0.085, weight: FontWeight.w600, color: ink, spacing: 0.4),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class BarberAvatar extends StatelessWidget {
@@ -633,7 +712,7 @@ class BarberAvatar extends StatelessWidget {
     decoration: BoxDecoration(
       shape: BoxShape.circle,
       gradient: const LinearGradient(colors: [AppColors.steel, AppColors.graphite]),
-      border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      border: Border.all(color: AppColors.white.withValues(alpha: 0.18)),
       image: barber.photoUrl == null || barber.photoUrl!.isEmpty
           ? null
           : DecorationImage(image: NetworkImage(barber.photoUrl!), fit: BoxFit.cover),
@@ -691,6 +770,18 @@ class EmptyState extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// Scorrimento dell'app: le pagine restano ferme se il contenuto ci sta
+/// (niente rimbalzo o effetto elastico), scorrono solo quando serve.
+class AppScrollBehavior extends MaterialScrollBehavior {
+  const AppScrollBehavior();
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) => const ClampingScrollPhysics();
+
+  @override
+  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) => child;
 }
 
 /// Transizione morbida tra le pagine.

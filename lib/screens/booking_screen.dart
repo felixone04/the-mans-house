@@ -355,7 +355,7 @@ class _BookingScreenState extends State<BookingScreen> {
                   height: 52,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+                    border: Border.all(color: AppColors.white.withValues(alpha: 0.25)),
                   ),
                   child: const Icon(Icons.groups_outlined),
                 ),
@@ -710,7 +710,7 @@ class _BookingScreenState extends State<BookingScreen> {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.black.withValues(alpha: 0.6),
-        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+        border: Border(top: BorderSide(color: AppColors.white.withValues(alpha: 0.18))),
       ),
       padding: const EdgeInsets.fromLTRB(0, 12, 0, 12),
       child: ResponsiveCenter(
@@ -798,7 +798,7 @@ class _StepIndicator extends StatelessWidget {
                     duration: const Duration(milliseconds: 250),
                     height: 3,
                     decoration: BoxDecoration(
-                      color: i <= current ? AppColors.white : Colors.white.withValues(alpha: 0.12),
+                      color: i <= current ? AppColors.white : AppColors.white.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -843,9 +843,9 @@ class _DayChip extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 9),
         decoration: BoxDecoration(
-          color: selected ? AppColors.white : Colors.white.withValues(alpha: enabled ? 0.06 : 0.02),
+          color: selected ? AppColors.white : Colors.white.withValues(alpha: enabled ? 0.55 : 0.18),
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.white.withValues(alpha: selected ? 1 : 0.10)),
+          border: Border.all(color: AppColors.white.withValues(alpha: selected ? 1 : 0.10)),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -880,9 +880,9 @@ class _SlotChip extends StatelessWidget {
       duration: const Duration(milliseconds: 180),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: selected ? AppColors.white : Colors.white.withValues(alpha: 0.06),
+        color: selected ? AppColors.white : Colors.white.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: Colors.white.withValues(alpha: selected ? 1 : 0.10)),
+        border: Border.all(color: AppColors.white.withValues(alpha: selected ? 1 : 0.10)),
       ),
       child: Text(
         label,
@@ -910,7 +910,7 @@ class _PriceListRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
-        color: selected ? AppColors.white.withValues(alpha: 0.10) : Colors.white.withValues(alpha: 0.03),
+        color: selected ? Colors.white.withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.55),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(

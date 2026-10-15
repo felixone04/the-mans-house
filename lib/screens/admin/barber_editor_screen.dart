@@ -527,8 +527,8 @@ class _TimeButton extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
-        color: Colors.white.withValues(alpha: 0.06),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        color: Colors.white.withValues(alpha: 0.5),
+        border: Border.all(color: AppColors.white.withValues(alpha: 0.1)),
       ),
       child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
     ),

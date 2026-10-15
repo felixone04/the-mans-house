@@ -138,7 +138,7 @@ class _AuthScreenState extends State<AuthScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (!_register) ...[
-                  const Center(child: AppLogo(height: 72, markOnly: true)),
+                  const Center(child: AppLogo(height: 120)),
                   const SizedBox(height: 18),
                 ],
                 SegmentedButton<bool>(
