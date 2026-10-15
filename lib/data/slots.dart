@@ -29,6 +29,29 @@ List<DateTime> availableSlots({
   return result;
 }
 
+/// Tutti gli orari di inizio possibili nella giornata (liberi e occupati),
+/// dopo [now]: servono per mostrare anche gli orari gia' presi.
+List<DateTime> candidateSlots({
+  required Iterable<Barber> barbers,
+  required int durationMin,
+  required DateTime day,
+  required int stepMin,
+  DateTime? now,
+}) {
+  final current = now ?? DateTime.now();
+  final d = dayOnly(day);
+  final result = <DateTime>{};
+  for (final b in barbers) {
+    for (final h in b.hoursOn(d)) {
+      for (var m = h.start; m + durationMin <= h.end; m += stepMin) {
+        final start = DateTime(d.year, d.month, d.day, 0, m);
+        if (start.isAfter(current)) result.add(start);
+      }
+    }
+  }
+  return result.toList()..sort();
+}
+
 /// Minuti di lavoro (solo appuntamenti: ferie e permessi non contano) di un
 /// barbiere in un intervallo.
 int busyMinutes(String barberId, List<BusyInterval> busy, DateTime from, DateTime to) {

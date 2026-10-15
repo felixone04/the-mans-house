@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:the_mans_house/data/calendar.dart';
 import 'package:the_mans_house/data/slots.dart';
 import 'package:the_mans_house/models.dart';
 
@@ -101,6 +102,30 @@ void main() {
     ShopCalendar.set([ShopDay(day: DateTime(2026, 10, 21), note: 'Ferie')]);
     expect(shopStatus([b], at(20, 21, 0)), (false, 'Chiuso · apre martedì alle 09:00'));
     ShopCalendar.set(const []);
+  });
+
+  test('calendario: link Google e file .ics con orari in UTC e testo protetto', () {
+    final e = CalendarEvent(
+      title: 'Taglio, barba; rifinitura',
+      start: DateTime.utc(2026, 10, 16, 8, 30),
+      end: DateTime.utc(2026, 10, 16, 9, 20),
+      location: 'Via Garibaldi 91, Andria',
+    );
+    expect(e.googleUrl.queryParameters['dates'], '20261016T083000Z/20261016T092000Z');
+    final ics = e.toIcs(now: DateTime.utc(2026, 10, 15));
+    expect(ics, contains('DTSTART:20261016T083000Z\r\n'));
+    expect(ics, contains(r'SUMMARY:Taglio\, barba\; rifinitura'));
+    expect(ics, contains(r'LOCATION:Via Garibaldi 91\, Andria'));
+    expect(ics, contains('TRIGGER:-PT1H'));
+  });
+
+  test('candidateSlots: tutti gli orari della fascia, anche quelli gia\' presi', () {
+    final b = Barber(id: 'b1', name: 'Antonio', hours: [WorkingHours(weekday: 2, start: 540, end: 600)]);
+    final day = DateTime(2026, 10, 20);
+    final all = candidateSlots(barbers: [b], durationMin: 30, day: day, stepMin: 15, now: DateTime(2026, 10, 1));
+    expect(all.map((s) => s.hour * 60 + s.minute), [540, 555, 570]);
+    // gli orari gia' passati non compaiono
+    expect(candidateSlots(barbers: [b], durationMin: 30, day: day, stepMin: 15, now: DateTime(2026, 10, 20, 9, 10)).length, 2);
   });
 
   test('Appointment.isUpcoming solo se confermato e futuro', () {

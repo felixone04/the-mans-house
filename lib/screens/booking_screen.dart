@@ -51,10 +51,13 @@ class _BookingScreenState extends State<BookingScreen> {
   bool _anyBarber = false;
   DateTime? _day;
   DateTime? _slot;
-  int _week = 0; // settimana mostrata nel passo data/ora
+  final _dayScroll = ScrollController(); // striscia dei giorni nel passo data/ora
 
   List<BusyInterval>? _busy;
   Map<DateTime, Map<DateTime, Barber>> _availability = {};
+
+  /// Tutti gli orari del giorno (anche occupati), per mostrarli barrati.
+  Map<DateTime, List<DateTime>> _allSlots = {};
   bool _loadingSlots = false;
   bool _booking = false;
 
@@ -89,6 +92,7 @@ class _BookingScreenState extends State<BookingScreen> {
   @override
   void dispose() {
     _notes.dispose();
+    _dayScroll.dispose();
     super.dispose();
   }
 
@@ -133,7 +137,7 @@ class _BookingScreenState extends State<BookingScreen> {
         _day = dayOnly(nearest);
         _slot = nearest;
       }
-      if (_day != null) _showWeekOf(_day!);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToDay());
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -153,6 +157,26 @@ class _BookingScreenState extends State<BookingScreen> {
                   s: _barber!,
               },
     };
+    _allSlots = {
+      for (final d in _days)
+        d: candidateSlots(
+          barbers: _anyBarber ? _state.barbers : [_barber!],
+          durationMin: dur,
+          day: d,
+          stepMin: step,
+        ),
+    };
+  }
+
+  static const _dayW = 58.0, _dayGap = 8.0;
+
+  /// Porta in vista il giorno scelto nella striscia dei giorni.
+  void _scrollToDay() {
+    if (!_dayScroll.hasClients || _day == null) return;
+    final i = _days.indexOf(_day!);
+    if (i < 0) return;
+    final target = (i * (_dayW + _dayGap) - 24).clamp(0.0, _dayScroll.position.maxScrollExtent);
+    _dayScroll.jumpTo(target);
   }
 
   void _goTo(int step) {
@@ -251,8 +275,20 @@ class _BookingScreenState extends State<BookingScreen> {
         if (!didPop) _back();
       },
       child: AppScaffold(
-        title: _moving ? 'Sposta appuntamento' : (widget.adminMode ? 'Nuovo appuntamento' : 'Prenota'),
+        // in alto il nome del passo e "3 di 4", sotto la barra di avanzamento
+        title: _moving && _step == 3 ? 'Sposta appuntamento' : _steps[_step],
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: _back),
+        actions: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Text(
+                '${_step + 1} di ${_steps.length}',
+                style: const TextStyle(color: AppColors.silver, fontSize: 13.5, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+        ],
         body: SafeArea(
           child: Column(
             children: [
@@ -267,7 +303,6 @@ class _BookingScreenState extends State<BookingScreen> {
                   },
                 ),
               ),
-              const SizedBox(height: 8),
               Expanded(
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 260),
@@ -421,118 +456,120 @@ class _BookingScreenState extends State<BookingScreen> {
 
   // --- Passo 3: data e ora ---
 
-  DateTime get _thisMonday {
-    final today = dayOnly(DateTime.now());
-    return DateTime(today.year, today.month, today.day - (today.weekday - 1));
+  /// Riepilogo del servizio scelto, con "Cambia".
+  Widget _summaryCard() {
+    final s = _service!;
+    final assigned = _slot == null ? null : _availability[_day]?[_slot];
+    final who = _anyBarber ? (assigned?.name ?? 'Primo disponibile') : (_barber?.name ?? '');
+    return Material(
+      color: Colors.white.withValues(alpha: 0.6),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: AppColors.white.withValues(alpha: 0.14)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
+        child: Row(
+          children: [
+            ServiceIcon(s.name, size: 42, square: true),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    s.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                  ),
+                  Text(
+                    '${fmtDuration(s.durationMin)} · ${fmtPrice(s.price)} · $who',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppColors.silver, fontSize: 12.5),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              // spostando, il servizio resta quello: si cambia il barbiere
+              onPressed: () => setState(() => _step = _moving || widget.initialBarber != null ? 1 : 0),
+              child: const Text('Cambia', style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
-
-  /// Lunedi' della settimana mostrata (settimane navigabili con le frecce).
-  DateTime get _weekStart => DateTime(_thisMonday.year, _thisMonday.month, _thisMonday.day + 7 * _week);
-
-  int get _maxWeek => _days.last.difference(_thisMonday).inDays ~/ 7;
-
-  void _showWeekOf(DateTime d) => _week = dayOnly(d).difference(_thisMonday).inDays ~/ 7;
 
   Widget _buildDateTime() {
     if (_loadingSlots || _busy == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    final slots = _availability[_day] ?? {};
-    final groups = <String, List<DateTime>>{
-      'Mattina': slots.keys.where((s) => s.hour < 13).toList(),
-      'Pomeriggio': slots.keys.where((s) => s.hour >= 13 && s.hour < 17).toList(),
-      'Sera': slots.keys.where((s) => s.hour >= 17).toList(),
+    final free = _availability[_day] ?? {};
+    final all = _allSlots[_day] ?? const <DateTime>[];
+    final groups = <String, List<(DateTime, bool)>>{
+      'Mattina': [for (final s in all) if (s.hour < 13) (s, free.containsKey(s))],
+      'Pomeriggio': [for (final s in all) if (s.hour >= 13) (s, free.containsKey(s))],
     }..removeWhere((_, v) => v.isEmpty);
-    final start = _weekStart;
-    final week = [for (var i = 0; i < 7; i++) DateTime(start.year, start.month, start.day + i)];
-    final assigned = _slot == null ? null : slots[_slot];
+    final days = _days;
 
     return ResponsiveCenter(
       maxWidth: 640,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Settimana con frecce: niente scorrimento orizzontale
-          Row(
-            children: [
-              IconButton(
-                onPressed: _week > 0 ? () => setState(() => _week--) : null,
-                icon: const Icon(Icons.chevron_left),
-              ),
-              Expanded(
-                child: Text(
-                  capitalize(DateFormat('MMMM yyyy', 'it_IT').format(week[3])),
-                  textAlign: TextAlign.center,
-                  style: slab(size: 15, weight: FontWeight.w600, spacing: 1),
-                ),
-              ),
-              IconButton(
-                onPressed: _week < _maxWeek ? () => setState(() => _week++) : null,
-                icon: const Icon(Icons.chevron_right),
-              ),
-            ],
+          _summaryCard(),
+          const SizedBox(height: 14),
+          Text(
+            _day == null ? '' : capitalize(DateFormat('MMMM yyyy', 'it_IT').format(_day!)),
+            style: const TextStyle(color: AppColors.white, fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 0.4),
           ),
-          Row(
-            children: [
-              for (var i = 0; i < 7; i++) ...[
-                if (i > 0) const SizedBox(width: 6),
-                Expanded(
+          const SizedBox(height: 8),
+          // striscia dei giorni: pallino verde = libero, arancio = pochi posti,
+          // grigio e barrato = chiuso o pieno
+          SizedBox(
+            height: 76,
+            child: ListView.separated(
+              controller: _dayScroll,
+              scrollDirection: Axis.horizontal,
+              itemCount: days.length,
+              separatorBuilder: (_, _) => const SizedBox(width: _dayGap),
+              itemBuilder: (context, i) {
+                final d = days[i];
+                final n = _availability[d]?.length ?? 0;
+                return SizedBox(
+                  width: _dayW,
                   child: _DayChip(
-                    day: week[i],
-                    selected: week[i] == _day,
-                    enabled: _availability[week[i]]?.isNotEmpty ?? false,
+                    day: d,
+                    selected: d == _day,
+                    level: n == 0
+                        ? _DayLevel.closed
+                        : n <= 3
+                        ? _DayLevel.few
+                        : _DayLevel.free,
                     onTap: () => setState(() {
-                      _day = week[i];
+                      _day = d;
                       _slot = null;
                     }),
                   ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 14),
-          // altezza fissa e suggerimento sempre visibile: scegliendo l'orario
-          // compare il badge senza spostare la griglia sotto il dito
-          SizedBox(
-            height: 34,
-            child: Row(
-              children: [
-                Expanded(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      _day == null ? '' : fmtDayLong(_day!),
-                      style: slab(size: 16, weight: FontWeight.w600, spacing: 0.5),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                if (_anyBarber && assigned != null)
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 240),
-                    child: _AssignedBadge(barber: assigned),
-                  ),
-              ],
+                );
+              },
             ),
           ),
-          if (_anyBarber)
-            const Padding(
-              padding: EdgeInsets.only(top: 2),
-              child: Text(
-                'Barbiere assegnato in automatico in base all\'orario',
-                style: TextStyle(color: AppColors.muted, fontSize: 12),
-              ),
-            ),
           const SizedBox(height: 6),
           Expanded(
-            child: slots.isEmpty
-                ? const EmptyState(
+            child: free.isEmpty
+                ? EmptyState(
                     icon: Icons.event_busy,
-                    text: 'Nessun orario libero in questa data.\nProva un altro giorno.',
+                    text: all.isEmpty
+                        ? 'In questa data siamo chiusi.\nScegli un altro giorno.'
+                        : 'Questo giorno è al completo.\nScegli un altro giorno.',
                   )
                 : _SlotGrid(groups: groups, selected: _slot, onSelect: (s) => setState(() => _slot = s)),
           ),
+          const _Legend(),
         ],
       ),
     );
@@ -722,70 +759,53 @@ class _BookingScreenState extends State<BookingScreen> {
     );
   }
 
+  /// Pulsante nero in fondo: "Continua · Ven 16, 10:30" o la conferma.
   Widget _buildBottomBar() {
-    final canContinue = _slot != null;
-    final barber = _slot == null ? null : _availability[_day]?[_slot];
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.black.withValues(alpha: 0.6),
-        border: Border(top: BorderSide(color: AppColors.white.withValues(alpha: 0.18))),
-      ),
-      padding: const EdgeInsets.fromLTRB(0, 12, 0, 12),
+    final slot = _slot;
+    final when = slot == null ? '' : '${capitalize(DateFormat('EEE d', 'it_IT').format(slot))}, ${fmtTime(slot)}';
+    final String label;
+    final VoidCallback? onTap;
+    if (_step == 2) {
+      label = slot == null ? 'Scegli un orario' : 'Continua · $when';
+      onTap = slot == null ? null : () => _goTo(3);
+    } else {
+      label = _moving
+          ? 'Sposta · $when'
+          : widget.adminMode
+          ? 'Inserisci appuntamento'
+          : 'Conferma prenotazione';
+      onTap = _booking ? null : _confirm;
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 8, 0, 12),
       child: ResponsiveCenter(
         maxWidth: 640,
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _service?.name ?? '',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  Text(
-                    _slot == null ? 'Scegli un orario' : '${fmtDayShort(_slot!)} · ${fmtTime(_slot!)}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: AppColors.silver, fontSize: 13),
-                  ),
-                  // riga a parte (sempre presente, cosi' la griglia non si sposta):
-                  // sui telefoni stretti "assegnato a ..." veniva troncato
-                  Text(
-                    barber == null
-                        ? (_anyBarber ? 'barbiere: primo disponibile' : 'con ${_barber?.name ?? ''}')
-                        : '${_anyBarber ? 'assegnato a ' : 'con '}${barber.name}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: _anyBarber ? AppColors.white : AppColors.silver,
-                      fontSize: 13,
-                      fontWeight: _anyBarber ? FontWeight.w700 : FontWeight.w400,
-                    ),
-                  ),
-                ],
-              ),
+        child: SizedBox(
+          height: 56,
+          child: FilledButton(
+            onPressed: onTap,
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.quiet,
+              foregroundColor: AppColors.quietText,
+              disabledBackgroundColor: AppColors.quiet.withValues(alpha: 0.35),
+              disabledForegroundColor: AppColors.quietText.withValues(alpha: 0.8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              textStyle: exo(fontSize: 15.5, fontWeight: FontWeight.w800, letterSpacing: 0.3),
             ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 170,
-              child: _step == 2
-                  ? FilledButton(onPressed: canContinue ? () => _goTo(3) : null, child: const Text('CONTINUA'))
-                  : FilledButton(
-                      onPressed: _booking ? null : _confirm,
-                      child: _booking
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2.4, color: AppColors.black),
-                            )
-                          : Text(_moving ? 'SPOSTA' : 'CONFERMA'),
-                    ),
-            ),
-          ],
+            child: _booking
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.4, color: AppColors.quietText),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      if (onTap != null) ...[const SizedBox(width: 8), const Icon(Icons.chevron_right, size: 22)],
+                    ],
+                  ),
+          ),
         ),
       ),
     );
@@ -798,42 +818,31 @@ class _StepIndicator extends StatelessWidget {
   final int current;
   final ValueChanged<int> onTap;
 
+  /// Barra di avanzamento a segmenti (i passi gia' fatti si possono toccare).
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 4, bottom: 12),
+    padding: const EdgeInsets.only(top: 2, bottom: 14),
     child: Row(
       children: [
         for (var i = 0; i < steps.length; i++) ...[
           if (i > 0) const SizedBox(width: 6),
           Expanded(
-            child: InkWell(
-              onTap: () => onTap(i),
-              borderRadius: BorderRadius.circular(6),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  AnimatedContainer(
+            child: Tooltip(
+              message: steps[i],
+              child: InkWell(
+                onTap: () => onTap(i),
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: AnimatedContainer(
                     duration: const Duration(milliseconds: 250),
-                    height: 3,
+                    height: 4,
                     decoration: BoxDecoration(
-                      color: i <= current ? AppColors.white : AppColors.white.withValues(alpha: 0.12),
+                      color: i <= current ? AppColors.white : AppColors.white.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    steps[i].toUpperCase(),
-                    maxLines: 1,
-                    overflow: TextOverflow.fade,
-                    softWrap: false,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      letterSpacing: 1,
-                      fontWeight: FontWeight.w700,
-                      color: i == current ? AppColors.white : AppColors.muted,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -843,39 +852,65 @@ class _StepIndicator extends StatelessWidget {
   );
 }
 
+enum _DayLevel { free, few, closed }
+
+const _freeGreen = Color(0xFF1F9D55);
+const _fewOrange = Color(0xFFE08A1E);
+
+/// Giorno della striscia: giorno della settimana, numero e pallino di disponibilita'.
 class _DayChip extends StatelessWidget {
-  const _DayChip({required this.day, required this.selected, required this.enabled, required this.onTap});
+  const _DayChip({required this.day, required this.selected, required this.level, required this.onTap});
   final DateTime day;
   final bool selected;
-  final bool enabled;
+  final _DayLevel level;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final fg = selected ? AppColors.black : (enabled ? AppColors.white : AppColors.muted.withValues(alpha: 0.5));
-    final parts = fmtDayShort(day).split(' '); // Lun 12 Ott
+    final closed = level == _DayLevel.closed;
+    final fg = selected ? AppColors.quietText : (closed ? AppColors.muted.withValues(alpha: 0.55) : AppColors.white);
+    final dot = switch (level) {
+      _DayLevel.free => _freeGreen,
+      _DayLevel.few => _fewOrange,
+      _DayLevel.closed => AppColors.muted.withValues(alpha: 0.4),
+    };
     return InkWell(
-      onTap: enabled ? onTap : null,
-      borderRadius: BorderRadius.circular(6),
+      onTap: closed ? null : onTap,
+      borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 9),
         decoration: BoxDecoration(
-          color: selected ? AppColors.white : Colors.white.withValues(alpha: enabled ? 0.55 : 0.18),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: AppColors.white.withValues(alpha: selected ? 1 : 0.10)),
+          color: selected ? AppColors.quiet : Colors.white.withValues(alpha: closed ? 0.22 : 0.6),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.white.withValues(alpha: selected ? 1 : 0.12)),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              parts[0].replaceAll('.', '').toUpperCase(),
-              style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1),
+              DateFormat('EEE', 'it_IT').format(day).replaceAll('.', '').toUpperCase(),
+              style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.8),
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 1),
             Text(
-              parts[1],
-              style: slab(size: 19, color: fg, weight: FontWeight.w700, spacing: 0),
+              '${day.day}',
+              style: TextStyle(
+                color: fg,
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                decoration: closed ? TextDecoration.lineThrough : null,
+                decorationColor: fg,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: dot,
+                border: selected ? Border.all(color: AppColors.quietText, width: 1) : null,
+              ),
             ),
           ],
         ),
@@ -884,32 +919,97 @@ class _DayChip extends StatelessWidget {
   }
 }
 
+/// Orario: libero (bordo verde), occupato (grigio e barrato) o scelto (nero).
 class _SlotChip extends StatelessWidget {
-  const _SlotChip({required this.label, required this.selected, required this.onTap});
+  const _SlotChip({required this.label, required this.selected, required this.onTap, this.free = true});
   final String label;
   final bool selected;
+  final bool free;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(6),
-    child: AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: selected ? AppColors.white : Colors.white.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.white.withValues(alpha: selected ? 1 : 0.10)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: selected ? AppColors.black : AppColors.white,
-          fontWeight: FontWeight.w700,
-          fontSize: 15,
+  Widget build(BuildContext context) {
+    final Color bg, border, fg;
+    if (selected) {
+      (bg, border, fg) = (AppColors.quiet, AppColors.quiet, AppColors.quietText);
+    } else if (free) {
+      (bg, border, fg) = (Colors.white.withValues(alpha: 0.7), _freeGreen, AppColors.white);
+    } else {
+      (bg, border, fg) = (
+        AppColors.white.withValues(alpha: 0.07),
+        AppColors.white.withValues(alpha: 0.08),
+        AppColors.muted.withValues(alpha: 0.6),
+      );
+    }
+    return InkWell(
+      onTap: free ? onTap : null,
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: border, width: free && !selected ? 1.4 : 1),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: fg,
+            fontWeight: FontWeight.w800,
+            fontSize: 15,
+            decoration: free ? null : TextDecoration.lineThrough,
+            decorationColor: fg,
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// Legenda sotto gli orari.
+class _Legend extends StatelessWidget {
+  const _Legend();
+
+  Widget _item(Widget mark, String text) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      mark,
+      const SizedBox(width: 5),
+      Text(text, style: const TextStyle(color: AppColors.silver, fontSize: 12, fontWeight: FontWeight.w600)),
+    ],
+  );
+
+  Widget _box(Color bg, Color border) => Container(
+    width: 14,
+    height: 14,
+    decoration: BoxDecoration(
+      color: bg,
+      borderRadius: BorderRadius.circular(4),
+      border: Border.all(color: border, width: 1.4),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 8),
+    child: Wrap(
+      spacing: 14,
+      runSpacing: 6,
+      alignment: WrapAlignment.center,
+      children: [
+        _item(_box(Colors.white.withValues(alpha: 0.7), _freeGreen), 'Libero'),
+        _item(_box(AppColors.white.withValues(alpha: 0.07), AppColors.white.withValues(alpha: 0.12)), 'Occupato'),
+        _item(_box(AppColors.quiet, AppColors.quiet), 'Scelto'),
+        _item(
+          Container(
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(shape: BoxShape.circle, color: _fewOrange),
+          ),
+          'Pochi posti',
+        ),
+      ],
     ),
   );
 }
@@ -977,54 +1077,15 @@ class _PriceListRow extends StatelessWidget {
   }
 }
 
-/// Barbiere assegnato in automatico ("primo disponibile").
-class _AssignedBadge extends StatelessWidget {
-  const _AssignedBadge({required this.barber});
-  final Barber barber;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.fromLTRB(4, 4, 12, 4),
-    decoration: BoxDecoration(
-      color: AppColors.white.withValues(alpha: 0.10),
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: AppColors.white.withValues(alpha: 0.4)),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        BarberAvatar(barber: barber, size: 24),
-        const SizedBox(width: 8),
-        Flexible(
-          child: Text.rich(
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            TextSpan(
-              children: [
-                const TextSpan(
-                  text: 'Assegnato a ',
-                  style: TextStyle(color: AppColors.silver, fontSize: 12.5),
-                ),
-                TextSpan(
-                  text: barber.name,
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
 /// Griglia degli orari che si adatta allo spazio disponibile: piu' colonne
 /// e righe piu' basse quando gli orari sono tanti, cosi' la pagina non scorre.
 /// Se gli orari sono troppi per restare leggibili (es. intervallo di 5 minuti)
 /// si sceglie prima l'ora e poi i minuti.
 class _SlotGrid extends StatefulWidget {
   const _SlotGrid({required this.groups, required this.selected, required this.onSelect});
-  final Map<String, List<DateTime>> groups;
+
+  /// Orari per fascia: (orario, libero?).
+  final Map<String, List<(DateTime, bool)>> groups;
   final DateTime? selected;
   final ValueChanged<DateTime> onSelect;
 
@@ -1042,7 +1103,10 @@ class _SlotGridState extends State<_SlotGrid> {
   int? _hour; // ora scelta nella vista "per ora"
 
   /// Colonne e altezza delle righe; [scale] e' la riduzione che servirebbe.
-  ({int cols, double rowH, double w, double scale}) _layout(Map<String, List<DateTime>> groups, BoxConstraints c) {
+  ({int cols, double rowH, double w, double scale}) _layout(
+    Map<String, List<(DateTime, bool)>> groups,
+    BoxConstraints c,
+  ) {
     // colonne larghe almeno 54 px per leggere bene l'orario
     final maxCols = ((c.maxWidth + _gap) / (54 + _gap)).floor().clamp(3, 8);
     int rowsFor(int cols) => groups.values.fold<int>(0, (n, g) => n + (g.length + cols - 1) ~/ cols);
@@ -1067,21 +1131,33 @@ class _SlotGridState extends State<_SlotGrid> {
     );
   }
 
-  Widget _label(String text) => SizedBox(
+  /// "MATTINA   4 liberi"
+  Widget _label(String text, [int? free]) => SizedBox(
     height: _labelH,
     child: Align(
       alignment: Alignment.bottomLeft,
       child: Padding(
         padding: const EdgeInsets.only(bottom: 6),
-        child: Text(
-          text.toUpperCase(),
-          style: const TextStyle(color: AppColors.muted, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.6),
+        child: Row(
+          children: [
+            Text(
+              text.toUpperCase(),
+              style: const TextStyle(color: AppColors.white, fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 1.4),
+            ),
+            if (free != null) ...[
+              const SizedBox(width: 8),
+              Text(
+                free == 1 ? '1 libero' : '$free liberi',
+                style: const TextStyle(color: AppColors.silver, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ],
         ),
       ),
     ),
   );
 
-  Widget _grid(Map<String, List<DateTime>> groups, BoxConstraints c) {
+  Widget _grid(Map<String, List<(DateTime, bool)>> groups, BoxConstraints c) {
     final l = _layout(groups, c);
     return FittedBox(
       fit: BoxFit.scaleDown,
@@ -1093,17 +1169,18 @@ class _SlotGridState extends State<_SlotGrid> {
           mainAxisSize: MainAxisSize.min,
           children: [
             for (final g in groups.entries) ...[
-              _label(g.key),
+              _label(g.key, g.value.where((e) => e.$2).length),
               Wrap(
                 spacing: _gap,
                 runSpacing: _gap,
                 children: [
-                  for (final s in g.value)
+                  for (final (s, free) in g.value)
                     SizedBox(
                       width: l.w,
                       height: l.rowH,
                       child: _SlotChip(
                         label: fmtTime(s),
+                        free: free,
                         selected: s == widget.selected,
                         onTap: () => widget.onSelect(s),
                       ),
@@ -1123,10 +1200,12 @@ class _SlotGridState extends State<_SlotGrid> {
       if (_layout(widget.groups, c).scale >= _minScale) return _grid(widget.groups, c);
 
       // Troppi orari: prima l'ora, poi i minuti di quell'ora
-      final byHour = <int, List<DateTime>>{};
-      for (final s in widget.groups.values.expand((g) => g)) {
-        byHour.putIfAbsent(s.hour, () => []).add(s);
+      // (solo le ore con almeno un orario libero)
+      final byHour = <int, List<(DateTime, bool)>>{};
+      for (final e in widget.groups.values.expand((g) => g)) {
+        byHour.putIfAbsent(e.$1.hour, () => []).add(e);
       }
+      byHour.removeWhere((_, v) => !v.any((e) => e.$2));
       final sel = widget.selected;
       final hour = byHour.containsKey(_hour)
           ? _hour!
