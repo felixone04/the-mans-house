@@ -70,6 +70,32 @@ abstract class Backend {
   Future<void> saveBarber(Barber barber);
   Future<void> deleteBarber(String id);
 
+  // --- Prodotti e magazzino ---
+  /// Prodotti in vendita (i clienti vedono solo quelli attivi, senza giacenza).
+  Future<List<Product>> fetchProducts({bool includeInactive = false});
+  Future<void> saveProduct(Product product);
+  Future<void> deleteProduct(String id);
+
+  /// Carica una foto del prodotto e ne restituisce l'indirizzo.
+  Future<String> uploadProductPhoto(List<int> bytes, String extension);
+
+  /// Solo area riservata: giacenza e soglia di sottoscorta per prodotto.
+  Future<Map<String, ProductStock>> fetchStock();
+  Future<void> setStockThreshold(String productId, int threshold);
+
+  /// Carico (positivo) o rettifica della giacenza.
+  Future<void> adjustStock(String productId, int delta, {String note = ''});
+
+  /// Vendita: scala la giacenza e, se legata a un appuntamento, ne aumenta
+  /// il totale da pagare.
+  Future<void> sellProduct(String productId, int qty, {String? appointmentId});
+
+  /// Annulla una vendita (la giacenza torna come prima).
+  Future<void> cancelSale(String saleId);
+
+  /// Prodotti venduti con un appuntamento.
+  Future<List<ProductSale>> appointmentSales(String appointmentId);
+
   /// Chiusure e orari speciali del negozio (dati pubblici).
   Future<List<ShopDay>> fetchShopDays();
   Future<void> saveShopDays(List<ShopDay> days);

@@ -316,6 +316,126 @@ String statusLabel(AppointmentStatus s) => switch (s) {
   AppointmentStatus.confirmed => 'Confermato',
 };
 
+/// Prodotto in vendita nel negozio (visibile ai clienti, senza giacenza).
+class Product {
+  String id;
+  String name;
+  String brand;
+  String category; // es. Styling, Barba, Cura
+  String format; // es. "100 ml"
+  double price;
+  String description;
+  String howToUse;
+  String hairType; // per quali capelli / barba
+  int hold; // fissaggio 0-5 (0 = non indicato)
+  int shine; // lucentezza 0-5
+  List<String> photos; // indirizzi delle foto (risultati sui capelli)
+  bool active;
+  int sortOrder;
+
+  Product({
+    this.id = '',
+    required this.name,
+    this.brand = '',
+    this.category = '',
+    this.format = '',
+    required this.price,
+    this.description = '',
+    this.howToUse = '',
+    this.hairType = '',
+    this.hold = 0,
+    this.shine = 0,
+    List<String>? photos,
+    this.active = true,
+    this.sortOrder = 0,
+  }) : photos = photos ?? [];
+
+  factory Product.fromJson(Map<String, dynamic> j) => Product(
+    id: j['id'],
+    name: j['name'] ?? '',
+    brand: j['brand'] ?? '',
+    category: j['category'] ?? '',
+    format: j['format'] ?? '',
+    price: _num(j['price']),
+    description: j['description'] ?? '',
+    howToUse: j['how_to_use'] ?? '',
+    hairType: j['hair_type'] ?? '',
+    hold: (j['hold'] as num?)?.toInt() ?? 0,
+    shine: (j['shine'] as num?)?.toInt() ?? 0,
+    photos: ((j['photos'] as List?) ?? []).cast<String>(),
+    active: j['active'] ?? true,
+    sortOrder: (j['sort_order'] as num?)?.toInt() ?? 0,
+  );
+
+  Map<String, dynamic> toJson() => {
+    if (id.isNotEmpty) 'id': id,
+    'name': name,
+    'brand': brand,
+    'category': category,
+    'format': format,
+    'price': price,
+    'description': description,
+    'how_to_use': howToUse,
+    'hair_type': hairType,
+    'hold': hold,
+    'shine': shine,
+    'photos': photos,
+    'active': active,
+    'sort_order': sortOrder,
+  };
+
+  Product copy() => Product.fromJson({...toJson(), 'id': id});
+}
+
+/// Giacenza di un prodotto (solo area riservata) con soglia di sottoscorta.
+class ProductStock {
+  ProductStock({required this.productId, this.stock = 0, this.threshold = 0});
+  final String productId;
+  int stock;
+  int threshold;
+
+  /// Da riordinare: giacenza pari o sotto la soglia (o esaurito).
+  bool get low => stock <= 0 || stock <= threshold;
+
+  factory ProductStock.fromJson(Map<String, dynamic> j) => ProductStock(
+    productId: j['product_id'],
+    stock: (j['stock'] as num?)?.toInt() ?? 0,
+    threshold: (j['threshold'] as num?)?.toInt() ?? 0,
+  );
+}
+
+/// Prodotto venduto (anche insieme a un appuntamento).
+class ProductSale {
+  ProductSale({
+    required this.id,
+    required this.productId,
+    required this.productName,
+    required this.qty,
+    required this.unitPrice,
+    this.appointmentId,
+    required this.at,
+  });
+  final String id;
+  final String productId;
+  final String productName;
+  final int qty;
+  final double unitPrice;
+  final String? appointmentId;
+  final DateTime at;
+
+  double get total => unitPrice * qty;
+
+  factory ProductSale.fromJson(Map<String, dynamic> j) => ProductSale(
+    id: j['id'],
+    productId: j['product_id'],
+    productName: (j['products'] as Map?)?['name'] ?? '',
+    qty: -((j['qty'] as num?)?.toInt() ?? 0), // nei movimenti la vendita e' negativa
+    unitPrice: _num(j['unit_price']),
+    appointmentId: j['appointment_id'],
+    at: _dt(j['created_at']),
+  );
+}
+
 /// Pagamento di un appuntamento (segnato dal negozio).
 enum PaymentStatus { unpaid, paid, later, deposit }
 
@@ -356,8 +476,11 @@ class Appointment {
   DateTime? arrivedAt;
   PaymentStatus payment;
 
-  /// Importo gia' pagato (acconto); per [PaymentStatus.paid] vale il prezzo.
+  /// Importo gia' pagato (acconto); per [PaymentStatus.paid] vale il totale.
   double amountPaid;
+
+  /// Prodotti venduti insieme all'appuntamento (si sommano al totale da pagare).
+  double productsTotal;
 
   Appointment({
     required this.id,
@@ -378,6 +501,7 @@ class Appointment {
     this.arrivedAt,
     this.payment = PaymentStatus.unpaid,
     this.amountPaid = 0,
+    this.productsTotal = 0,
   });
 
   factory Appointment.fromJson(Map<String, dynamic> j) => Appointment(
@@ -399,21 +523,25 @@ class Appointment {
     arrivedAt: j['arrived_at'] == null ? null : _dt(j['arrived_at']),
     payment: paymentFromString(j['payment_status']),
     amountPaid: _num(j['amount_paid']),
+    productsTotal: _num(j['products_total']),
   );
 
   bool get isUpcoming => status == AppointmentStatus.confirmed && start.isAfter(DateTime.now());
 
+  /// Totale da pagare: servizio + prodotti venduti con l'appuntamento.
+  double get total => price + productsTotal;
+
   /// Incassato finora.
   double get collected => switch (payment) {
-    PaymentStatus.paid => price,
-    PaymentStatus.deposit => amountPaid.clamp(0, price).toDouble(),
+    PaymentStatus.paid => total,
+    PaymentStatus.deposit => amountPaid.clamp(0, total).toDouble(),
     _ => 0,
   };
 
   /// Ancora da incassare per un servizio svolto (o con pagamento rimandato).
   double get outstanding =>
       status == AppointmentStatus.completed || payment == PaymentStatus.later || payment == PaymentStatus.deposit
-      ? price - collected
+      ? total - collected
       : 0;
 }
 

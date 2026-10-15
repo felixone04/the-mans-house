@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import '../models.dart';
@@ -137,6 +138,7 @@ class DemoBackend implements Backend {
     );
 
     _seedAppointments();
+    _seedProducts();
     // demo: due clienti dal banco hanno dato il consenso alle offerte
     _walkInMarketing.addAll(['Marco Rossi', 'Luca Bianchi']);
   }
@@ -377,6 +379,141 @@ class DemoBackend implements Backend {
     }
     _barbers.removeWhere((b) => b.id == id);
   });
+
+  // --- Prodotti e magazzino ---
+
+  final _products = <Product>[];
+  final _stock = <String, ProductStock>{};
+  final _movements = <ProductSale>[];
+
+  void _seedProducts() {
+    Product p(String name, String cat, String format, double price, {int hold = 0, int shine = 0, String hair = ''}) =>
+        Product(
+          id: _id(),
+          name: name,
+          brand: 'The Man\'s House',
+          category: cat,
+          format: format,
+          price: price,
+          hold: hold,
+          shine: shine,
+          hairType: hair,
+          description: 'Prodotto professionale usato ogni giorno in negozio.',
+          howToUse: 'Una piccola quantità sui capelli asciutti, poi modella con le dita.',
+          sortOrder: _products.length,
+        );
+    _products.addAll([
+      p('Cera opaca', 'Styling', '100 ml', 16, hold: 4, shine: 1, hair: 'Capelli corti e medi'),
+      p('Pomata lucida', 'Styling', '100 ml', 15, hold: 3, shine: 4, hair: 'Pettinature classiche'),
+      p('Olio da barba', 'Barba', '30 ml', 14, hair: 'Barba media e lunga'),
+      p('Balsamo barba', 'Barba', '50 ml', 13, hair: 'Barba di ogni lunghezza'),
+      p('Shampoo quotidiano', 'Cura', '250 ml', 12, hair: 'Tutti i tipi di capelli'),
+    ]);
+    final stock = [2, 9, 0, 6, 14];
+    for (var i = 0; i < _products.length; i++) {
+      _stock[_products[i].id] = ProductStock(productId: _products[i].id, stock: stock[i], threshold: 4);
+    }
+  }
+
+  void _admin() {
+    if (!(_current?.isAdmin ?? false)) throw AppException('Operazione non consentita');
+  }
+
+  @override
+  Future<List<Product>> fetchProducts({bool includeInactive = false}) => _delay(
+    () => _products.where((p) => includeInactive || p.active).map((p) => p.copy()).toList()
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder)),
+  );
+
+  @override
+  Future<void> saveProduct(Product p) => _delay(() {
+    _admin();
+    if (p.id.isEmpty) {
+      p.id = _id();
+      p.sortOrder = _products.length;
+      _products.add(p.copy());
+      _stock[p.id] = ProductStock(productId: p.id);
+    } else {
+      _products[_products.indexWhere((x) => x.id == p.id)] = p.copy();
+    }
+  });
+
+  @override
+  Future<void> deleteProduct(String id) => _delay(() {
+    _admin();
+    _products.removeWhere((p) => p.id == id);
+    _stock.remove(id);
+  });
+
+  @override
+  Future<String> uploadProductPhoto(List<int> bytes, String extension) => _delay(() {
+    // demo: la foto resta in memoria come indirizzo "data:"
+    final type = extension.toLowerCase() == 'png' ? 'png' : 'jpeg';
+    return 'data:image/$type;base64,${base64Encode(bytes)}';
+  });
+
+  @override
+  Future<Map<String, ProductStock>> fetchStock() => _delay(() {
+    _admin();
+    return {
+      for (final e in _stock.entries)
+        e.key: ProductStock(productId: e.key, stock: e.value.stock, threshold: e.value.threshold),
+    };
+  });
+
+  @override
+  Future<void> setStockThreshold(String productId, int threshold) => _delay(() {
+    _admin();
+    _stock.putIfAbsent(productId, () => ProductStock(productId: productId)).threshold = threshold;
+  });
+
+  @override
+  Future<void> adjustStock(String productId, int delta, {String note = ''}) => _delay(() {
+    _admin();
+    final s = _stock.putIfAbsent(productId, () => ProductStock(productId: productId));
+    if (s.stock + delta < 0) throw AppException('La giacenza non può andare sotto zero');
+    s.stock += delta;
+  });
+
+  @override
+  Future<void> sellProduct(String productId, int qty, {String? appointmentId}) => _delay(() {
+    _admin();
+    if (qty <= 0) throw AppException('Quantità non valida');
+    final product = _products.firstWhere((p) => p.id == productId);
+    final s = _stock.putIfAbsent(productId, () => ProductStock(productId: productId));
+    // come sell_product sul server: niente vendite oltre la giacenza
+    if (s.stock < qty) throw AppException('Giacenza insufficiente: ne restano ${s.stock}');
+    s.stock -= qty;
+    _movements.add(
+      ProductSale(
+        id: _id(),
+        productId: productId,
+        productName: product.name,
+        qty: qty,
+        unitPrice: product.price,
+        appointmentId: appointmentId,
+        at: DateTime.now(),
+      ),
+    );
+    if (appointmentId != null) {
+      _appointments.firstWhere((a) => a.id == appointmentId).productsTotal += product.price * qty;
+    }
+  });
+
+  @override
+  Future<void> cancelSale(String saleId) => _delay(() {
+    _admin();
+    final sale = _movements.firstWhere((m) => m.id == saleId);
+    _movements.remove(sale);
+    _stock.putIfAbsent(sale.productId, () => ProductStock(productId: sale.productId)).stock += sale.qty;
+    if (sale.appointmentId != null) {
+      _appointments.firstWhere((a) => a.id == sale.appointmentId).productsTotal -= sale.total;
+    }
+  });
+
+  @override
+  Future<List<ProductSale>> appointmentSales(String appointmentId) =>
+      _delay(() => _movements.where((m) => m.appointmentId == appointmentId).toList());
 
   @override
   Future<List<ShopDay>> fetchShopDays() => _delay(() => _shopDays.values.toList()..sort((a, b) => a.day.compareTo(b.day)));

@@ -346,6 +346,47 @@ void main() {
     expect(saved.outstanding, 0);
   });
 
+  test('magazzino: giacenza solo admin, vendita col taglio o al banco, annullo', () async {
+    // il cliente vede i prodotti ma non la giacenza
+    await signUp('prodotti@test.it');
+    final products = await backend.fetchProducts();
+    expect(products, isNotEmpty);
+    await expectLater(() => backend.fetchStock(), throwsA(isA<AppException>()));
+
+    final barber = (await backend.fetchBarbers()).first;
+    final service = (await backend.fetchServices()).first;
+    final start = await freeSlot(barber, service, DateTime.now().add(const Duration(hours: 4)));
+    final a = await backend.book(barberId: barber.id, serviceId: service.id, start: start);
+
+    await backend.signOut();
+    await backend.signInWithEmail(DemoBackend.adminEmail, DemoBackend.adminPassword);
+    final p = products.first;
+    await backend.adjustStock(p.id, 5 - (await backend.fetchStock())[p.id]!.stock);
+    await backend.setStockThreshold(p.id, 2);
+
+    // insieme al taglio: scende la giacenza e sale il conto
+    await backend.sellProduct(p.id, 2, appointmentId: a.id);
+    expect((await backend.fetchStock())[p.id]!.stock, 3);
+    final day = dayOnly(start);
+    Future<Appointment> saved() async =>
+        (await backend.appointmentsBetween(day, day.add(const Duration(days: 1)))).firstWhere((x) => x.id == a.id);
+    expect((await saved()).total, service.price + p.price * 2);
+    final sales = await backend.appointmentSales(a.id);
+    expect(sales.single.qty, 2);
+
+    // al banco, senza appuntamento: sotto la soglia scatta l'avviso
+    await backend.sellProduct(p.id, 1);
+    expect((await backend.fetchStock())[p.id]!.low, isTrue);
+    // non si vende piu' di quanto c'e'
+    await expectLater(() => backend.sellProduct(p.id, 3), throwsA(isA<AppException>()));
+    await expectLater(() => backend.adjustStock(p.id, -10), throwsA(isA<AppException>()));
+
+    // annullo: torna in magazzino ed esce dal conto
+    await backend.cancelSale(sales.single.id);
+    expect((await backend.fetchStock())[p.id]!.stock, 4);
+    expect((await saved()).total, service.price);
+  });
+
   test('chiusura del negozio: niente prenotazioni quel giorno, orario speciale solo in fascia', () async {
     await backend.signInWithEmail(DemoBackend.adminEmail, DemoBackend.adminPassword);
     final barber = (await backend.fetchBarbers()).first;

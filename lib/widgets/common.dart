@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -339,6 +340,34 @@ class _PolePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _PolePainter old) => old.t != t;
+}
+
+/// Foto di un prodotto (indirizzo web o foto caricata in modalita' demo);
+/// senza foto mostra un riquadro con l'iniziale della categoria.
+class ProductPhoto extends StatelessWidget {
+  const ProductPhoto({super.key, required this.url, this.radius = 10, this.fit = BoxFit.cover});
+  final String? url;
+  final double radius;
+  final BoxFit fit;
+
+  @override
+  Widget build(BuildContext context) {
+    final u = url;
+    Widget placeholder() => Container(
+      color: AppColors.white.withValues(alpha: 0.08),
+      alignment: Alignment.center,
+      child: Icon(Icons.inventory_2_outlined, color: AppColors.white.withValues(alpha: 0.45), size: 30),
+    );
+    Widget image;
+    if (u == null || u.isEmpty) {
+      image = placeholder();
+    } else if (u.startsWith('data:')) {
+      image = Image.memory(base64Decode(u.substring(u.indexOf(',') + 1)), fit: fit, gaplessPlayback: true);
+    } else {
+      image = Image.network(u, fit: fit, errorBuilder: (_, _, _) => placeholder());
+    }
+    return ClipRRect(borderRadius: BorderRadius.circular(radius), child: image);
+  }
 }
 
 /// Icona di Instagram (quadrato arrotondato, obiettivo e flash), disegnata

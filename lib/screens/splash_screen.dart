@@ -66,7 +66,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                 scale: scale,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: AppLogo(height: logoHeight, subtitle: 'Barber Shop · Andria'),
+                  child: AppLogo(height: logoHeight),
                 ),
               ),
             ),

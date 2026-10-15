@@ -221,6 +221,71 @@ class SupabaseBackend implements Backend {
     }
   });
 
+  // --- Prodotti e magazzino ---
+
+  @override
+  Future<List<Product>> fetchProducts({bool includeInactive = false}) => _guard(() async {
+    var q = _db.from('products').select();
+    if (!includeInactive) q = q.eq('active', true);
+    final rows = await q.order('sort_order').order('name');
+    return rows.map(Product.fromJson).toList();
+  });
+
+  @override
+  Future<void> saveProduct(Product p) => _guard(() async {
+    final row = await _db.from('products').upsert(p.toJson()).select().single();
+    p.id = row['id'] as String;
+  });
+
+  @override
+  Future<void> deleteProduct(String id) => _guard(() async {
+    await _db.from('products').delete().eq('id', id);
+  });
+
+  @override
+  Future<String> uploadProductPhoto(List<int> bytes, String extension) => _guard(() async {
+    final path = 'foto/${DateTime.now().microsecondsSinceEpoch}.$extension';
+    await _db.storage.from('products').uploadBinary(path, Uint8List.fromList(bytes));
+    return _db.storage.from('products').getPublicUrl(path);
+  });
+
+  @override
+  Future<Map<String, ProductStock>> fetchStock() => _guard(() async {
+    final rows = await _db.from('product_stock').select();
+    return {for (final r in rows) r['product_id'] as String: ProductStock.fromJson(r)};
+  });
+
+  @override
+  Future<void> setStockThreshold(String productId, int threshold) => _guard(() async {
+    await _db.from('product_stock').upsert({'product_id': productId, 'threshold': threshold});
+  });
+
+  @override
+  Future<void> adjustStock(String productId, int delta, {String note = ''}) => _guard(() async {
+    await _db.rpc('adjust_stock', params: {'p_product': productId, 'p_delta': delta, 'p_note': note});
+  });
+
+  @override
+  Future<void> sellProduct(String productId, int qty, {String? appointmentId}) => _guard(() async {
+    await _db.rpc('sell_product', params: {'p_product': productId, 'p_qty': qty, 'p_appointment': appointmentId});
+  });
+
+  @override
+  Future<void> cancelSale(String saleId) => _guard(() async {
+    await _db.rpc('cancel_sale', params: {'p_movement': saleId});
+  });
+
+  @override
+  Future<List<ProductSale>> appointmentSales(String appointmentId) => _guard(() async {
+    final rows = await _db
+        .from('stock_movements')
+        .select('*, products(name)')
+        .eq('appointment_id', appointmentId)
+        .eq('kind', 'sale')
+        .order('created_at');
+    return rows.map(ProductSale.fromJson).toList();
+  });
+
   @override
   Future<List<ShopDay>> fetchShopDays() => _guard(() async {
         final rows = await _db.from('shop_days').select().order('day');

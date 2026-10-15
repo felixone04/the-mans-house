@@ -85,9 +85,33 @@ Map<DateTime, Barber> availableSlotsAnyBarber({
 }
 
 /// Orari del negozio in un giorno (unione delle fasce di tutti i barbieri).
-List<List<int>> shopHoursFor(List<Barber> barbers, int weekday) {
-  final ranges = barbers.expand((b) => b.hoursFor(weekday)).map((h) => [h.start, h.end]).toList()
-    ..sort((a, b) => a[0].compareTo(b[0]));
+List<List<int>> shopHoursFor(List<Barber> barbers, int weekday) =>
+    _merge(barbers.expand((b) => b.hoursFor(weekday)));
+
+/// Come [shopHoursFor] ma per una data precisa: conta chiusure e orari speciali.
+List<List<int>> shopHoursOn(List<Barber> barbers, DateTime day) => _merge(barbers.expand((b) => b.hoursOn(day)));
+
+/// Stato del negozio per la home: (aperto adesso?, testo breve).
+(bool, String) shopStatus(List<Barber> barbers, DateTime now) {
+  final today = dayOnly(now);
+  final m = now.hour * 60 + now.minute;
+  for (final r in shopHoursOn(barbers, today)) {
+    if (m >= r[0] && m < r[1]) return (true, 'Aperto · chiude alle ${formatTime(r[1])}');
+    if (m < r[0]) return (false, 'Chiuso · apre alle ${formatTime(r[0])}');
+  }
+  for (var i = 1; i <= 14; i++) {
+    final d = DateTime(today.year, today.month, today.day + i);
+    final hours = shopHoursOn(barbers, d);
+    if (hours.isEmpty) continue;
+    const names = ['lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato', 'domenica'];
+    final when = i == 1 ? 'domani' : names[d.weekday - 1];
+    return (false, 'Chiuso · apre $when alle ${formatTime(hours.first[0])}');
+  }
+  return (false, 'Chiuso');
+}
+
+List<List<int>> _merge(Iterable<WorkingHours> hours) {
+  final ranges = hours.map((h) => [h.start, h.end]).toList()..sort((a, b) => a[0].compareTo(b[0]));
   final merged = <List<int>>[];
   for (final r in ranges) {
     if (merged.isNotEmpty && r[0] <= merged.last[1]) {

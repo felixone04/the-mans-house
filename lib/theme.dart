@@ -220,7 +220,7 @@ ThemeData buildTheme() {
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: AppColors.black,
       indicatorColor: AppColors.white.withValues(alpha: 0.12),
-      labelTextStyle: WidgetStatePropertyAll(exo(fontSize: 12, fontWeight: FontWeight.w600)),
+      labelTextStyle: WidgetStatePropertyAll(exo(fontSize: 11, fontWeight: FontWeight.w600)),
     ),
     navigationRailTheme: NavigationRailThemeData(
       backgroundColor: Colors.transparent,

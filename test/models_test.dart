@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:the_mans_house/data/slots.dart';
 import 'package:the_mans_house/models.dart';
 
 void main() {
@@ -82,6 +83,23 @@ void main() {
     expect(json, {'day': '2026-10-25', 'open_time': '09:00', 'close_time': '13:00', 'note': 'x', 'barber_ids': null});
     final back = ShopDay.fromJson({...json, 'open_time': '09:00:00', 'close_time': '13:00:00'});
     expect((back.open, back.close, back.closed), (540, 780, false));
+    ShopCalendar.set(const []);
+  });
+
+  test('stato del negozio in home: aperto, pausa, chiusura e prossima apertura', () {
+    final b = Barber(id: 'b1', name: 'Antonio', hours: [
+      WorkingHours(weekday: 2, start: 540, end: 780),
+      WorkingHours(weekday: 2, start: 930, end: 1200),
+      WorkingHours(weekday: 3, start: 540, end: 780),
+    ]);
+    DateTime at(int day, int h, int m) => DateTime(2026, 10, day, h, m); // 20 = martedi'
+    expect(shopStatus([b], at(20, 10, 0)), (true, 'Aperto · chiude alle 13:00'));
+    expect(shopStatus([b], at(20, 14, 0)), (false, 'Chiuso · apre alle 15:30'));
+    expect(shopStatus([b], at(20, 21, 0)), (false, 'Chiuso · apre domani alle 09:00'));
+    expect(shopStatus([b], at(21, 14, 0)), (false, 'Chiuso · apre martedì alle 09:00'));
+    // chiusura straordinaria domani: si salta al giorno dopo utile
+    ShopCalendar.set([ShopDay(day: DateTime(2026, 10, 21), note: 'Ferie')]);
+    expect(shopStatus([b], at(20, 21, 0)), (false, 'Chiuso · apre martedì alle 09:00'));
     ShopCalendar.set(const []);
   });
 

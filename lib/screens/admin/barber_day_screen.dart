@@ -8,6 +8,7 @@ import '../../state/app_state.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
 import 'agenda_actions.dart';
+import 'products_tab.dart';
 import 'walk_in_sheet.dart';
 
 /// Giornata di un barbiere (telefono, colori chiari): un appuntamento per
@@ -144,14 +145,16 @@ class _BarberDayScreenState extends State<BarberDayScreen> with AgendaActions {
       constraints: const BoxConstraints(maxWidth: 520),
       builder: (_) => _PaymentSheet(appointment: a, debts: debts),
     );
-    if (r == null || !mounted) return;
+    if (!mounted) return;
+    // anche senza salvare, i prodotti aggiunti cambiano il conto: si ricarica
+    if (r == null) return _load(silent: true);
     final (payment, paid, settleDebts) = r;
     if (settleDebts) {
       // salda anche le visite precedenti rimaste da pagare
       final backend = AppScope.read(context).backend;
       try {
         for (final d in debts) {
-          await backend.updateVisit(d.id, arrivedAt: d.arrivedAt, payment: PaymentStatus.paid, amountPaid: d.price);
+          await backend.updateVisit(d.id, arrivedAt: d.arrivedAt, payment: PaymentStatus.paid, amountPaid: d.total);
         }
       } catch (e) {
         if (mounted) showError(context, e);
@@ -170,7 +173,7 @@ class _BarberDayScreenState extends State<BarberDayScreen> with AgendaActions {
     final nowMin = minuteOf(now);
     final kept = _items.where((a) => a.status != AppointmentStatus.noShow);
     final collected = _items.fold<double>(0, (s, a) => s + a.collected);
-    final expected = kept.fold<double>(0, (s, a) => s + a.price);
+    final expected = kept.fold<double>(0, (s, a) => s + a.total);
 
     // voci in ordine di orario: (minuto, ordine a parita', widget)
     final entries = <(int, int, Widget)>[
@@ -472,7 +475,8 @@ class _VisitCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${a.serviceName} · ${fmtPrice(a.price)}',
+                  '${a.serviceName} · ${fmtPrice(a.price)}'
+                  '${a.productsTotal > 0 ? ' + prodotti ${fmtPrice(a.productsTotal)}' : ''}',
                   style: TextStyle(color: t.mid, fontSize: 15, fontWeight: FontWeight.w600),
                 ),
                 if (a.notes.isNotEmpty) ...[
@@ -527,7 +531,7 @@ class _VisitCard extends StatelessWidget {
     PaymentStatus.unpaid => 'Pagato?',
     PaymentStatus.paid => 'Pagato',
     PaymentStatus.later => 'Paga dopo',
-    PaymentStatus.deposit => 'Resta ${fmtPrice(a.price - a.collected)}',
+    PaymentStatus.deposit => 'Resta ${fmtPrice(a.total - a.collected)}',
   };
 }
 
@@ -782,6 +786,46 @@ class _PaymentSheetState extends State<_PaymentSheet> {
   );
   String? _error;
 
+  /// Prodotti venduti insieme a questa visita (si sommano al conto).
+  List<ProductSale> _sales = [];
+  late double _productsTotal = widget.appointment.productsTotal;
+
+  double get _total => widget.appointment.price + _productsTotal;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSales();
+  }
+
+  Future<void> _loadSales() async {
+    try {
+      final sales = await AppScope.read(context).backend.appointmentSales(widget.appointment.id);
+      if (!mounted) return;
+      setState(() {
+        _sales = sales;
+        _productsTotal = sales.fold<double>(0, (s, x) => s + x.total);
+      });
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
+  Future<void> _addProduct() async {
+    final sold = await showSellSheet(context, appointmentId: widget.appointment.id);
+    if (sold && mounted) await _loadSales();
+  }
+
+  Future<void> _removeSale(ProductSale s) async {
+    try {
+      // il prodotto torna in magazzino e esce dal conto
+      await AppScope.read(context).backend.cancelSale(s.id);
+      if (mounted) await _loadSales();
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
   @override
   void dispose() {
     _amount.dispose();
@@ -789,7 +833,7 @@ class _PaymentSheetState extends State<_PaymentSheet> {
   }
 
   void _save() {
-    final price = widget.appointment.price;
+    final price = _total;
     var paid = 0.0;
     switch (_choice) {
       case PaymentStatus.paid:
@@ -866,7 +910,7 @@ class _PaymentSheetState extends State<_PaymentSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Pagamento · ${fmtPrice(a.price)}',
+              'Pagamento · ${fmtPrice(_total)}',
               style: const TextStyle(color: AgendaLight.ink, fontSize: 20, fontWeight: FontWeight.w800),
             ),
             Text(
@@ -893,14 +937,88 @@ class _PaymentSheetState extends State<_PaymentSheet> {
                     style: const TextStyle(color: Color(0xFF4A2800), fontSize: 15, fontWeight: FontWeight.w800),
                   ),
                   subtitle: Text(
-                    'Totale oggi: ${fmtPrice(a.price - a.collected + _debt)}',
+                    'Totale oggi: ${fmtPrice(_total - a.collected + _debt)}',
                     style: const TextStyle(color: Color(0xFF6B3A00), fontSize: 13.5, fontWeight: FontWeight.w700),
                   ),
                 ),
               ),
             ],
             const SizedBox(height: 14),
-            _option(PaymentStatus.paid, Icons.check_circle_outline, 'Pagato', 'Ha pagato tutto: ${fmtPrice(a.price)}'),
+            // prodotti comprati insieme al taglio: dal magazzino al conto
+            for (final s in _sales)
+              Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.fromLTRB(14, 4, 4, 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF4EC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AgendaLight.ok.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.shopping_bag_outlined, color: AgendaLight.ok, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '${s.qty > 1 ? '${s.qty} × ' : ''}${s.productName}',
+                        style: const TextStyle(color: AgendaLight.ink, fontSize: 14.5, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    Text(
+                      fmtPrice(s.total),
+                      style: const TextStyle(color: AgendaLight.ink, fontSize: 14.5, fontWeight: FontWeight.w800),
+                    ),
+                    IconButton(
+                      tooltip: 'Togli (torna in magazzino)',
+                      onPressed: () => _removeSale(s),
+                      icon: const Icon(Icons.close, color: AgendaLight.sub, size: 20),
+                    ),
+                  ],
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: _addProduct,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AgendaLight.line),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.add_shopping_cart, color: AgendaLight.ink),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Aggiunta prodotto',
+                                style: TextStyle(color: AgendaLight.ink, fontSize: 15.5, fontWeight: FontWeight.w700),
+                              ),
+                              Text(
+                                _sales.isEmpty
+                                    ? 'Scegli dal magazzino: si aggiunge al conto'
+                                    : 'Servizio ${fmtPrice(a.price)} + prodotti ${fmtPrice(_productsTotal)}',
+                                style: const TextStyle(color: AgendaLight.sub, fontSize: 12.5),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right, color: AgendaLight.sub),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            _option(PaymentStatus.paid, Icons.check_circle_outline, 'Pagato', 'Ha pagato tutto: ${fmtPrice(_total)}'),
             _option(PaymentStatus.deposit, Icons.savings_outlined, 'Acconto', 'Ha lasciato una parte, il resto dopo'),
             if (_choice == PaymentStatus.deposit)
               Padding(
@@ -921,7 +1039,7 @@ class _PaymentSheetState extends State<_PaymentSheet> {
                     errorText: _error,
                     helperText: () {
                       final v = double.tryParse(_amount.text.trim().replaceAll(',', '.'));
-                      return v == null || v <= 0 || v >= a.price ? null : 'Resta da pagare ${fmtPrice(a.price - v)}';
+                      return v == null || v <= 0 || v >= _total ? null : 'Resta da pagare ${fmtPrice(_total - v)}';
                     }(),
                     helperStyle: const TextStyle(color: AgendaLight.ok, fontWeight: FontWeight.w700),
                   ),
