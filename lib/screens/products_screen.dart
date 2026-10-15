@@ -5,9 +5,10 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
-/// Prodotti in vendita nel negozio: blocchi con foto, nome, formato e
-/// prezzo, filtro per categoria. Toccando un prodotto si apre la sua scheda
-/// al centro dello schermo. La giacenza non si vede.
+/// Vetrina dei prodotti in esposizione nel negozio: blocchi con foto, nome,
+/// formato e prezzo, filtro per categoria. Toccando un prodotto si apre la sua
+/// scheda al centro dello schermo. Il cliente guarda soltanto: niente acquisto
+/// ne' prenotazione dall'app, e la giacenza non si vede.
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key});
 
@@ -57,6 +58,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 10),
+                          child: Text(
+                            'I prodotti che trovi in esposizione in negozio.',
+                            style: TextStyle(color: AppColors.white, fontSize: 13.5, fontWeight: FontWeight.w600),
+                          ),
+                        ),
                         if (categories.length > 1) ...[
                           SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
@@ -309,9 +317,18 @@ class _ProductDetailState extends State<_ProductDetail> {
             Text(p.howToUse, style: const TextStyle(color: AppColors.silver, height: 1.4)),
           ],
           const SizedBox(height: 10),
-          const Text(
-            'Disponibile in negozio: chiedi al tuo barbiere.',
-            style: TextStyle(color: AppColors.muted, fontSize: 12.5),
+          // solo vetrina: dall'app non si compra e non si prenota il prodotto
+          const Row(
+            children: [
+              Icon(Icons.storefront_outlined, size: 16, color: AppColors.muted),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'In esposizione in negozio: chiedi al tuo barbiere.',
+                  style: TextStyle(color: AppColors.muted, fontSize: 12.5),
+                ),
+              ),
+            ],
           ),
         ],
       ),
