@@ -91,8 +91,9 @@ void main() {
   testWidgets('giornata del barbiere: arrivato, completato e acconto', (tester) async {
     final (state, backend) = await pumpBarberDay(tester);
     final barber = state.barbers.first;
-    // nessuno ancora arrivato: schede rosse "DA ARRIVARE"
-    expect(find.text('DA ARRIVARE'), findsWidgets);
+    // giornata futura: tutti "In arrivo", nessuno ancora fatto
+    expect(find.text('In arrivo'), findsWidgets);
+    expect(find.text('Fatto'), findsNothing);
 
     // niente "Arrivato": completato vuol dire arrivato
     expect(find.textContaining('Arrivato'), findsNothing);
@@ -110,7 +111,8 @@ void main() {
     a = await firstOfDay(tester, backend, barber.id);
     expect(a.status, AppointmentStatus.completed);
     expect(a.arrivedAt, isNotNull); // completato = arrivato
-    expect(find.text('COMPLETATO'), findsOneWidget);
+    // completato ma non ancora pagato
+    expect(find.text('Da pagare'), findsOneWidget);
 
     // acconto di 5 euro: resta il resto
     await tester.tap(find.text('Pagato?').first);
