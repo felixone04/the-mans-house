@@ -204,16 +204,29 @@ class _BarberDayScreenState extends State<BarberDayScreen> with AgendaActions {
         ),
     ]..sort((x, y) => x.$1 != y.$1 ? x.$1.compareTo(y.$1) : x.$2.compareTo(y.$2));
 
+    // voci divise in Mattina e Pomeriggio, con il segno dell'ora attuale
     final children = <Widget>[];
     var nowPlaced = !isToday;
+    String? section;
+    void addSection(int minute) {
+      final s = minute < 13 * 60 ? 'Mattina' : 'Pomeriggio';
+      if (s == section) return;
+      section = s;
+      children.add(_SectionLabel(s));
+    }
+
     for (final e in entries) {
       if (!nowPlaced && e.$1 > nowMin) {
+        addSection(nowMin);
         children.add(_NowMarker(key: _nowKey, time: now));
         nowPlaced = true;
       }
+      addSection(e.$1);
       children.add(e.$3);
     }
     if (!nowPlaced && entries.isNotEmpty) children.add(_NowMarker(key: _nowKey, time: now));
+
+    final doneCount = kept.where((a) => a.status == AppointmentStatus.completed).length;
 
     return Theme(
       data: Theme.of(context).copyWith(
@@ -223,72 +236,6 @@ class _BarberDayScreenState extends State<BarberDayScreen> with AgendaActions {
       ),
       child: Scaffold(
         backgroundColor: AgendaLight.paper,
-        appBar: AppBar(
-          backgroundColor: tone.bg,
-          foregroundColor: tone.ink,
-          surfaceTintColor: Colors.transparent,
-          centerTitle: false,
-          titleSpacing: 0,
-          title: Row(
-            children: [
-              CircleAvatar(
-                radius: 17,
-                backgroundColor: tone.accent,
-                child: Text(
-                  b.initials,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      b.name,
-                      style: TextStyle(color: tone.ink, fontSize: 18, fontWeight: FontWeight.w800),
-                    ),
-                    Text(
-                      '${kept.length} ${kept.length == 1 ? 'appuntamento' : 'appuntamenti'} · '
-                      'incassati ${fmtPrice(collected)} su ${fmtPrice(expected)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: tone.mid, fontSize: 12.5),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(46),
-            child: Container(
-              color: tone.bg,
-              padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
-              child: Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Giorno precedente',
-                    onPressed: () => _shift(-1),
-                    icon: Icon(Icons.chevron_left, color: tone.ink),
-                  ),
-                  Expanded(
-                    child: Text(
-                      '${isToday ? 'Oggi · ' : ''}${fmtDayLong(_day)}',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: tone.ink, fontSize: 15, fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Giorno successivo',
-                    onPressed: () => _shift(1),
-                    icon: Icon(Icons.chevron_right, color: tone.ink),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
         floatingActionButton: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -298,6 +245,7 @@ class _BarberDayScreenState extends State<BarberDayScreen> with AgendaActions {
               elevation: 2,
               backgroundColor: Colors.white,
               foregroundColor: AgendaLight.ink,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
               onPressed: () => newAppointment(barber: b),
               child: const Icon(Icons.add),
             ),
@@ -309,76 +257,168 @@ class _BarberDayScreenState extends State<BarberDayScreen> with AgendaActions {
                 elevation: 2,
                 backgroundColor: AgendaLight.ink,
                 foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                 onPressed: () async {
                   if (await showWalkInSheet(context, barber: b)) _load(silent: true);
                 },
                 icon: const Icon(Icons.login),
-                label: const Text('Entrato ora'),
+                label: const Text('Entrato ora', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
               ),
           ],
         ),
-        body: _loading
-            ? const Center(child: CircularProgressIndicator(color: AgendaLight.ink))
-            : RefreshIndicator(
-                onRefresh: _load,
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(0, 14, 0, 96),
-                  children: [
-                    ResponsiveCenter(
-                      maxWidth: 640,
-                      alignment: Alignment.topLeft, // come i riquadri dei barbieri
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: children.isEmpty
-                            ? [
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 60),
-                                  child: Column(
-                                    children: [
-                                      Icon(Icons.weekend_outlined, size: 44, color: tone.accent),
-                                      const SizedBox(height: 12),
-                                      Text(
-                                        (ShopCalendar.forDay(_day)?.closed ?? false)
-                                            ? 'Negozio chiuso'
-                                                  '${ShopCalendar.forDay(_day)!.note.isEmpty ? '' : ' · ${ShopCalendar.forDay(_day)!.note}'}'
-                                            : b.hoursOn(_day).isEmpty
-                                            ? '${b.name} oggi è di riposo'
-                                            : 'Nessun appuntamento',
-                                        style: const TextStyle(color: AgendaLight.sub, fontSize: 15),
-                                      ),
-                                    ],
-                                  ),
+        body: Column(
+          children: [
+            // intestazione nel colore del barbiere: nome, completati e incassi, giorno
+            Container(
+              color: tone.bg,
+              child: SafeArea(
+                bottom: false,
+                child: ResponsiveCenter(
+                  maxWidth: 640,
+                  alignment: Alignment.topLeft,
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Material(
+                            color: Colors.white.withValues(alpha: 0.6),
+                            shape: const CircleBorder(),
+                            child: IconButton(
+                              tooltip: 'Indietro',
+                              onPressed: () => Navigator.of(context).maybePop(),
+                              icon: Icon(Icons.chevron_left, color: tone.ink),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  b.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: tone.ink, fontSize: 24, height: 1.1, fontWeight: FontWeight.w900),
                                 ),
-                              ]
-                            : children,
+                                Text(
+                                  '$doneCount di ${kept.length} completati · '
+                                  'incassati ${fmtPrice(collected)} su ${fmtPrice(expected)}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: tone.mid, fontSize: 13, fontWeight: FontWeight.w700),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 10),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              tooltip: 'Giorno precedente',
+                              onPressed: () => _shift(-1),
+                              icon: Icon(Icons.chevron_left, color: tone.ink),
+                            ),
+                            Expanded(
+                              child: Text(
+                                isToday ? 'Oggi · ${fmtDayLong(_day).toLowerCase()}' : fmtDayLong(_day),
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: tone.ink, fontSize: 15, fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Giorno successivo',
+                              onPressed: () => _shift(1),
+                              icon: Icon(Icons.chevron_right, color: tone.ink),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
+            ),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator(color: AgendaLight.ink))
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(0, 6, 0, 96),
+                        children: [
+                          ResponsiveCenter(
+                            maxWidth: 640,
+                            alignment: Alignment.topLeft, // come i riquadri dei barbieri
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: children.isEmpty
+                                  ? [
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 60),
+                                        child: Column(
+                                          children: [
+                                            Icon(Icons.weekend_outlined, size: 44, color: tone.accent),
+                                            const SizedBox(height: 12),
+                                            Text(
+                                              (ShopCalendar.forDay(_day)?.closed ?? false)
+                                                  ? 'Negozio chiuso'
+                                                        '${ShopCalendar.forDay(_day)!.note.isEmpty ? '' : ' · ${ShopCalendar.forDay(_day)!.note}'}'
+                                                  : b.hoursOn(_day).isEmpty
+                                                  ? '${b.name} oggi è di riposo'
+                                                  : 'Nessun appuntamento',
+                                              style: const TextStyle(color: AgendaLight.sub, fontSize: 15),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ]
+                                  : children,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// Rosso: da completare (cliente non ancora arrivato). Bianco: completato.
-/// Grigio: non presentato.
-const BarberTone _waitingTone = (
-  bg: Color(0xFFFCE4E4),
-  mid: Color(0xFFA32D2D),
-  accent: Color(0xFFD33A3A),
-  ink: Color(0xFF501313),
-);
-const BarberTone _doneTone = (bg: AgendaLight.card, mid: AgendaLight.sub, accent: AgendaLight.ok, ink: AgendaLight.ink);
-const BarberTone _noShowTone = (
-  bg: Color(0xFFEDEDED),
-  mid: AgendaLight.muted,
-  accent: AgendaLight.muted,
-  ink: AgendaLight.muted,
-);
+/// "MATTINA" / "POMERIGGIO" sopra le schede.
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+  final String text;
 
-/// Scheda grande di un appuntamento.
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(4, 12, 0, 8),
+    child: Text(
+      text.toUpperCase(),
+      style: const TextStyle(color: AgendaLight.muted, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.6),
+    ),
+  );
+}
+
+const _okGreen = Color(0xFF22A06B);
+const _nowBlue = Color(0xFF2F6FD6);
+const _lateRed = Color(0xFFD33A3A);
+
+/// Scheda di un appuntamento: orario grande, stato a destra, cliente,
+/// servizio e prezzo; sotto Completato e il pagamento.
 class _VisitCard extends StatelessWidget {
   const _VisitCard({
     required this.appointment,
@@ -401,125 +441,143 @@ class _VisitCard extends StatelessWidget {
     final now = DateTime.now();
     final done = a.status == AppointmentStatus.completed;
     final noShow = a.status == AppointmentStatus.noShow;
-    // completato = arrivato: finche' non e' completato la scheda resta rossa
     final waiting = a.status == AppointmentStatus.confirmed;
     final started = !a.start.isAfter(now);
     final ended = !a.end.isAfter(now);
-    final t = noShow
-        ? _noShowTone
-        : done
-        ? _doneTone
-        : _waitingTone;
+    final inProgress = waiting && started && !ended;
+    final paid = a.payment == PaymentStatus.paid;
     final mins = a.end.difference(a.start).inMinutes;
     final debt = debts.fold<double>(0, (s, d) => s + d.outstanding);
-    final dueToday = (a.price - a.collected).clamp(0, double.infinity) + debt;
+    final dueToday = (a.total - a.collected).clamp(0, double.infinity) + debt;
+
+    final (String status, Color statusColor) = noShow
+        ? ('Non venuto', AgendaLight.muted)
+        : done
+        ? (paid ? ('Fatto', _okGreen) : ('Da pagare', AgendaLight.warn))
+        : ended
+        ? ('Da chiudere', _lateRed)
+        : started
+        ? ('Adesso', _nowBlue)
+        : ('In arrivo', AgendaLight.sub);
+    final ink = noShow ? AgendaLight.muted : AgendaLight.ink;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Material(
-        color: t.bg,
-        borderRadius: BorderRadius.circular(16),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: done
-                  ? Border.all(color: AgendaLight.line, width: 1.5)
-                  : waiting
-                  ? Border.all(color: _waitingTone.accent.withValues(alpha: 0.45), width: 1.5)
-                  : null,
-            ),
-            padding: const EdgeInsets.fromLTRB(16, 12, 14, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      fmtTime(a.start),
-                      style: TextStyle(color: t.ink, fontSize: 30, height: 1, fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 2),
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: noShow ? const Color(0xFFEDEDED) : AgendaLight.card,
+          borderRadius: BorderRadius.circular(18),
+          border: inProgress
+              ? Border.all(color: _nowBlue, width: 1.8)
+              : waiting && ended
+              ? Border.all(color: _lateRed.withValues(alpha: 0.5), width: 1.5)
+              : Border.all(color: Colors.transparent, width: 1.8),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 2))],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(18),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        fmtTime(a.start),
+                        style: TextStyle(color: ink, fontSize: 26, height: 1, fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
                         child: Text(
-                          'fino alle ${fmtTime(a.end)} · $mins min',
+                          '– ${fmtTime(a.end)} · $mins min',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: t.mid, fontSize: 13.5, fontWeight: FontWeight.w600),
+                          style: const TextStyle(color: AgendaLight.sub, fontSize: 13.5, fontWeight: FontWeight.w500),
                         ),
                       ),
-                    ),
-                    if (waiting)
-                      _Pill(
-                        ended
-                            ? 'DA CHIUDERE'
-                            : started
-                            ? 'IN CORSO'
-                            : 'DA ARRIVARE',
-                        fg: Colors.white,
-                        bg: _waitingTone.accent,
-                      ),
-                    if (done) const _Pill('COMPLETATO', fg: Colors.white, bg: AgendaLight.ok),
-                    if (noShow) const _Pill('NON VENUTO', fg: Colors.white, bg: AgendaLight.muted),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  a.customerName.isEmpty ? 'Cliente' : a.customerName,
-                  style: TextStyle(color: t.ink, fontSize: 20, fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${a.serviceName} · ${fmtPrice(a.price)}'
-                  '${a.productsTotal > 0 ? ' + prodotti ${fmtPrice(a.productsTotal)}' : ''}',
-                  style: TextStyle(color: t.mid, fontSize: 15, fontWeight: FontWeight.w600),
-                ),
-                if (a.notes.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    '“${a.notes}”',
-                    style: TextStyle(color: t.mid, fontSize: 13.5, fontStyle: FontStyle.italic),
-                  ),
-                ],
-                // l'avviso serve al momento di incassare: non sulle visite gia' pagate
-                if (debt > 0 && !noShow && a.payment != PaymentStatus.paid) ...[
-                  const SizedBox(height: 10),
-                  _DebtBanner(debts: debts, debt: debt, dueToday: dueToday.toDouble()),
-                ],
-                if (!noShow) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      // l'arrivo si segna dal dettaglio (tocco sulla scheda)
-                      Expanded(
-                        child: _StepButton(
-                          icon: Icons.content_cut,
-                          label: done ? 'Completato' : 'Completato?',
-                          on: done,
-                          tone: t,
-                          onTap: onDone,
-                        ),
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
                       ),
                       const SizedBox(width: 6),
-                      Expanded(
-                        child: _StepButton(
-                          icon: Icons.euro,
-                          label: _paymentLabel(a),
-                          on: a.payment == PaymentStatus.paid,
-                          warn: a.payment == PaymentStatus.later || a.payment == PaymentStatus.deposit,
-                          tone: t,
-                          onTap: onPayment,
-                        ),
+                      Text(
+                        status,
+                        style: TextStyle(color: statusColor, fontSize: 13, fontWeight: FontWeight.w800),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 10),
+                  Text(
+                    a.customerName.isEmpty ? 'Cliente' : a.customerName,
+                    style: TextStyle(color: ink, fontSize: 19, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${a.serviceName}${a.productsTotal > 0 ? ' + prodotti ${fmtPrice(a.productsTotal)}' : ''}',
+                          style: const TextStyle(color: AgendaLight.sub, fontSize: 14),
+                        ),
+                      ),
+                      Text(
+                        fmtPrice(a.total),
+                        style: TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                  if (a.notes.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '“${a.notes}”',
+                      style: const TextStyle(color: AgendaLight.sub, fontSize: 13.5, fontStyle: FontStyle.italic),
+                    ),
+                  ],
+                  // l'avviso serve al momento di incassare: non sulle visite gia' pagate
+                  if (debt > 0 && !noShow && !paid) ...[
+                    const SizedBox(height: 10),
+                    _DebtBanner(debts: debts, debt: debt, dueToday: dueToday.toDouble()),
+                  ],
+                  if (!noShow) ...[
+                    const SizedBox(height: 12),
+                    const Divider(height: 1, color: AgendaLight.line),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        // l'arrivo si segna dal dettaglio (tocco sulla scheda)
+                        Expanded(
+                          child: _ActionButton(
+                            icon: done ? Icons.check : Icons.content_cut,
+                            label: done ? 'Completato' : 'Completato?',
+                            style: done ? _ActionStyle.on : _ActionStyle.off,
+                            onTap: onDone,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _ActionButton(
+                            icon: paid ? Icons.check : Icons.euro,
+                            label: _paymentLabel(a),
+                            style: paid
+                                ? _ActionStyle.on
+                                : a.payment == PaymentStatus.later || a.payment == PaymentStatus.deposit
+                                ? _ActionStyle.warn
+                                : _ActionStyle.off,
+                            onTap: onPayment,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -578,78 +636,52 @@ class _DebtBanner extends StatelessWidget {
   }
 }
 
-/// Pulsante di stato (Arrivato / Completato / Pagamento): pieno quando fatto.
-class _StepButton extends StatelessWidget {
-  const _StepButton({
-    required this.icon,
-    required this.label,
-    required this.on,
-    required this.tone,
-    required this.onTap,
-    this.warn = false,
-  });
+enum _ActionStyle { on, warn, off }
+
+/// Pulsante sotto la scheda: verde pieno quando fatto, arancio chiaro se
+/// resta da pagare, neutro se ancora da segnare.
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({required this.icon, required this.label, required this.style, required this.onTap});
   final IconData icon;
   final String label;
-  final bool on;
-  final bool warn;
-  final BarberTone tone;
+  final _ActionStyle style;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final fg = on ? Colors.white : (warn ? AgendaLight.warn : tone.ink);
-    final bg = on ? tone.accent : (warn ? const Color(0xFFFFF1DB) : Colors.white.withValues(alpha: 0.75));
+    final (Color bg, Color fg, Color border) = switch (style) {
+      _ActionStyle.on => (_okGreen, Colors.white, _okGreen),
+      _ActionStyle.warn => (const Color(0xFFFFEFD6), AgendaLight.warn, const Color(0xFFFFEFD6)),
+      _ActionStyle.off => (const Color(0xFFF4F3EF), AgendaLight.ink, AgendaLight.line),
+    };
     return Material(
       color: bg,
-      borderRadius: BorderRadius.circular(10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: border)),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          height: 46,
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: on ? tone.accent : (warn ? AgendaLight.warn : tone.accent.withValues(alpha: 0.35)),
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(on ? Icons.check : icon, size: 17, color: fg),
-              const SizedBox(height: 2),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  label,
-                  style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w700),
+        child: SizedBox(
+          height: 50,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 19, color: fg),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(label, style: TextStyle(color: fg, fontSize: 15.5, fontWeight: FontWeight.w800)),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill(this.text, {required this.fg, required this.bg});
-  final String text;
-  final Color fg;
-  final Color bg;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(left: 6),
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
-    child: Text(
-      text,
-      style: TextStyle(color: fg, fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.5),
-    ),
-  );
 }
 
 class _FreeCard extends StatelessWidget {
