@@ -6,6 +6,7 @@ import '../models.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'admin/customer_picker.dart';
 import 'auth_screen.dart';
 import 'booking_success_screen.dart';
 
@@ -58,11 +59,12 @@ class _BookingScreenState extends State<BookingScreen> {
   bool _booking = false;
 
   final _notes = TextEditingController();
-  late final _customerName = TextEditingController(text: widget.initialCustomerName ?? '');
-  late final _customerPhone = TextEditingController(
-    text: (widget.initialCustomerPhone ?? '').isEmpty ? '+39 ' : widget.initialCustomerPhone,
-  );
-  final _adminForm = GlobalKey<FormState>();
+
+  /// Admin: cliente scelto (esistente, nuovo o senza dati); dalla scheda
+  /// cliente arriva gia' impostato.
+  late BookingCustomer? _customer = (widget.initialCustomerName ?? '').isEmpty
+      ? null
+      : BookingCustomer(name: widget.initialCustomerName!, phone: widget.initialCustomerPhone ?? '');
 
   AppState get _state => AppScope.read(context);
 
@@ -87,8 +89,6 @@ class _BookingScreenState extends State<BookingScreen> {
   @override
   void dispose() {
     _notes.dispose();
-    _customerName.dispose();
-    _customerPhone.dispose();
     super.dispose();
   }
 
@@ -193,11 +193,17 @@ class _BookingScreenState extends State<BookingScreen> {
   Future<void> _confirm() async {
     if (_moving) return _move();
     if (widget.adminMode) {
-      if (!_adminForm.currentState!.validate()) return;
+      if (_customer == null) {
+        final c = await pickCustomer(context);
+        if (c == null || !mounted) return;
+        setState(() => _customer = c);
+      }
     } else {
-      final ok = await openAuthFlow(context);
+      // chi non ha l'account puo' prenotare come ospite
+      final ok = await openBookingAuth(context);
       if (!ok || !mounted) return;
     }
+    final customer = _customer;
     final barber = _availability[_day]?[_slot];
     if (barber == null) return;
 
@@ -208,9 +214,11 @@ class _BookingScreenState extends State<BookingScreen> {
         serviceId: _service!.id,
         start: _slot!,
         notes: _notes.text.trim(),
-        customerName: widget.adminMode ? _customerName.text.trim() : null,
-        // campo lasciato a "+39 ": nessun numero (prima veniva salvato "+39")
-        customerPhone: widget.adminMode ? (isValidPhone(_customerPhone.text) ? _customerPhone.text.trim() : '') : null,
+        // admin: cliente con account (userId) oppure dal banco (nome e contatti)
+        customerUserId: widget.adminMode ? customer?.userId : null,
+        customerName: widget.adminMode && customer?.userId == null ? customer?.name : null,
+        customerPhone: widget.adminMode && customer?.userId == null ? customer?.phone : null,
+        customerEmail: widget.adminMode && customer?.userId == null ? customer?.email : null,
       );
       appt.barberName = barber.name;
       if (!mounted) return;
@@ -635,32 +643,42 @@ class _BookingScreenState extends State<BookingScreen> {
             ),
           if (widget.adminMode && !_moving) ...[
             const SectionTitle('Cliente'),
-            Form(
-              key: _adminForm,
+            GlassCard(
+              padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+              onTap: () async {
+                final c = await pickCustomer(context);
+                if (c != null && mounted) setState(() => _customer = c);
+              },
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Icon(
+                    _customer == null
+                        ? Icons.person_search_outlined
+                        : _customer!.anonymous
+                        ? Icons.bolt
+                        : Icons.person,
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: TextFormField(
-                      controller: _customerName,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(labelText: 'Nome cliente'),
-                      validator: (v) => (v ?? '').trim().isEmpty ? 'Obbligatorio' : null,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _customer?.name ?? 'Scegli il cliente',
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                        ),
+                        Text(
+                          _customer == null ? 'Esistente, nuovo o senza dati' : _customer!.detail,
+                          style: const TextStyle(color: AppColors.muted, fontSize: 12.5),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _customerPhone,
-                      keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(labelText: 'Cellulare'),
-                      validator: (v) {
-                        final t = (v ?? '').replaceAll(RegExp(r'[\s+]'), '');
-                        if (t.isEmpty || t == '39') return null;
-                        return isValidPhone(v!) ? null : 'Numero non valido';
-                      },
-                    ),
+                  Text(
+                    _customer == null ? 'Scegli' : 'Cambia',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
+                  const Icon(Icons.chevron_right),
                 ],
               ),
             ),

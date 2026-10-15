@@ -230,6 +230,48 @@ class DemoBackend implements Backend {
     return true;
   });
 
+  final _guests = <String>{}; // id dei profili ospite (accesso senza account)
+
+  @override
+  bool get isGuest => _current != null && _guests.contains(_current!.id);
+
+  @override
+  Future<void> signInAsGuest({
+    required String fullName,
+    required String phone,
+    String email = '',
+    bool marketingOptIn = false,
+  }) => _delay(() {
+    final p = Profile(
+      id: _id(),
+      email: email.trim().toLowerCase(),
+      fullName: fullName.trim(),
+      phone: normalizePhone(phone),
+      privacyAcceptedAt: DateTime.now(),
+      marketingOptIn: marketingOptIn,
+    );
+    _guests.add(p.id);
+    _profiles['ospite:${p.id}'] = p;
+    _signIn(p);
+  });
+
+  @override
+  Future<bool> upgradeGuest({required String email, required String password}) => _delay(() {
+    final p = _current;
+    if (p == null || !_guests.contains(p.id)) throw AppException('Operazione non consentita');
+    final e = email.trim().toLowerCase();
+    if (_passwords.containsKey(e)) throw AppException('Esiste gia\' un account con questa email');
+    if (password.length < 6) throw AppException('La password deve avere almeno 6 caratteri');
+    // stesso profilo (stesso id): gli appuntamenti fatti da ospite restano suoi
+    _profiles.remove('ospite:${p.id}');
+    p.email = e;
+    _profiles[e] = p;
+    _passwords[e] = password;
+    _guests.remove(p.id);
+    _auth.add(null);
+    return true;
+  });
+
   Future<void> _social(String email, String name) => _delay(() {
     final p = _profiles.putIfAbsent(email, () => Profile(id: _id(), email: email, fullName: name));
     _passwords.putIfAbsent(email, () => '');
@@ -269,7 +311,8 @@ class DemoBackend implements Backend {
 
   @override
   Future<void> updateProfile(Profile p) => _delay(() {
-    final cur = _profiles[p.email];
+    // per id: gli ospiti non sono indicizzati per email
+    final cur = _profiles.values.where((x) => x.id == p.id).firstOrNull;
     if (cur == null) return;
     cur
       ..fullName = p.fullName.trim()
@@ -390,6 +433,8 @@ class DemoBackend implements Backend {
     String notes = '',
     String? customerName,
     String? customerPhone,
+    String? customerEmail,
+    String? customerUserId,
   }) async {
     final me = _current;
     if (me == null) throw AppException('Devi accedere per prenotare');
@@ -409,10 +454,16 @@ class DemoBackend implements Backend {
       stepMin: 1,
     ).contains(start);
     if (!ok) throw AppException('Orario non piu\' disponibile');
-    final byAdmin = me.isAdmin && customerName != null;
+    // come book_appointment sul server: l'admin puo' prenotare per un cliente
+    // con account (compare nella sua app) o per un cliente dal banco
+    final forUser = me.isAdmin && customerUserId != null
+        ? _profiles.values.where((p) => p.id == customerUserId).firstOrNull
+        : null;
+    final byAdmin = me.isAdmin && (customerName != null || forUser != null);
+    final owner = forUser ?? (byAdmin ? null : me);
     final a = Appointment(
       id: _id(),
-      userId: byAdmin ? null : me.id,
+      userId: owner?.id,
       barberId: barber.id,
       barberName: barber.name,
       serviceId: service.id,
@@ -420,8 +471,9 @@ class DemoBackend implements Backend {
       price: service.price,
       start: start,
       end: start.add(Duration(minutes: service.durationMin)),
-      customerName: byAdmin ? customerName : me.fullName,
-      customerPhone: byAdmin ? normalizePhone(customerPhone ?? '') : me.phone,
+      customerName: owner?.fullName ?? customerName!,
+      customerPhone: owner?.phone ?? normalizePhone(customerPhone ?? ''),
+      customerEmail: owner?.email ?? (customerEmail ?? '').trim(),
       notes: notes,
       createdByAdmin: byAdmin,
     );

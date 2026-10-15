@@ -7,6 +7,7 @@ import '../widgets/common.dart';
 import 'admin/admin_screen.dart';
 import 'booking_screen.dart';
 import 'complete_profile_screen.dart';
+import 'guest_screen.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -42,7 +43,21 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _signOut() async {
-    await AppScope.read(context).signOut();
+    final state = AppScope.read(context);
+    // l'ospite che esce non puo' piu' rientrare: meglio creare prima l'account
+    if (state.isGuest) {
+      final ok = await confirmDialog(
+        context,
+        title: 'Uscire senza account?',
+        message:
+            'Sei collegato come ospite: uscendo non vedrai più i tuoi appuntamenti nell\'app '
+            '(restano validi, e ricevi comunque i promemoria). Crea l\'account per non perderli.',
+        confirm: 'Esci comunque',
+        destructive: true,
+      );
+      if (!ok || !mounted) return;
+    }
+    await state.signOut();
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -125,6 +140,32 @@ class _AccountScreenState extends State<AccountScreen> {
                         ],
                       ),
                     ),
+                    if (state.isGuest) ...[
+                      const SizedBox(height: 10),
+                      GlassCard(
+                        padding: const EdgeInsets.fromLTRB(16, 13, 10, 13),
+                        onTap: () => Navigator.of(context).push(fadeRoute(const GuestUpgradeScreen())),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.verified_user_outlined),
+                            SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Crea il tuo account', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                                  Text(
+                                    'Sei ospite: con l\'account prenoti più in fretta e non perdi i tuoi appuntamenti',
+                                    style: TextStyle(color: AppColors.muted, fontSize: 12.5),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(Icons.chevron_right),
+                          ],
+                        ),
+                      ),
+                    ],
                     if (state.isAdmin) ...[
                       const SizedBox(height: 10),
                       GlassCard(

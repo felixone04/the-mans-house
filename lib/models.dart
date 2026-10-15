@@ -346,6 +346,9 @@ class Appointment {
   AppointmentStatus status;
   String customerName;
   String customerPhone;
+
+  /// Email facoltativa (ospiti e clienti inseriti dal titolare).
+  String customerEmail;
   String notes;
   bool createdByAdmin;
 
@@ -369,6 +372,7 @@ class Appointment {
     this.status = AppointmentStatus.confirmed,
     this.customerName = '',
     this.customerPhone = '',
+    this.customerEmail = '',
     this.notes = '',
     this.createdByAdmin = false,
     this.arrivedAt,
@@ -389,6 +393,7 @@ class Appointment {
     status: statusFromString(j['status'] ?? 'confirmed'),
     customerName: j['customer_name'] ?? '',
     customerPhone: j['customer_phone'] ?? '',
+    customerEmail: j['customer_email'] ?? '',
     notes: j['notes'] ?? '',
     createdByAdmin: j['created_by_admin'] ?? false,
     arrivedAt: j['arrived_at'] == null ? null : _dt(j['arrived_at']),

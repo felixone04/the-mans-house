@@ -401,6 +401,68 @@ void main() {
     expect(customers.firstWhere((c) => c.id == walkIn.id).marketingOptIn, isTrue);
   });
 
+  test('ospite: prenota senza account, poi crea l\'account e tiene gli appuntamenti', () async {
+    await backend.signInAsGuest(fullName: 'Gino Ospite', phone: '333 4445566', email: 'gino@test.it');
+    expect(backend.isGuest, isTrue);
+    final p = (await backend.fetchProfile())!;
+    expect(p.isComplete, isTrue); // nome, telefono e privacy: puo' prenotare subito
+    final barber = (await backend.fetchBarbers()).first;
+    final service = (await backend.fetchServices()).first;
+    final start = await freeSlot(barber, service, DateTime.now().add(const Duration(hours: 3)));
+    final a = await backend.book(barberId: barber.id, serviceId: service.id, start: start);
+    expect(a.customerName, 'Gino Ospite');
+    expect(a.customerEmail, 'gino@test.it');
+
+    expect(await backend.upgradeGuest(email: 'gino@test.it', password: 'segreta1'), isTrue);
+    expect(backend.isGuest, isFalse);
+    expect((await backend.myAppointments()).any((x) => x.id == a.id), isTrue);
+    // ora entra con email e password
+    await backend.signOut();
+    await backend.signInWithEmail('gino@test.it', 'segreta1');
+    expect((await backend.myAppointments()).any((x) => x.id == a.id), isTrue);
+  });
+
+  test('admin: prenota per un cliente con account, per un nuovo cliente e senza dati', () async {
+    await signUp('cliente.app@test.it');
+    final client = (await backend.fetchProfile())!;
+    await backend.signOut();
+    await backend.signInWithEmail(DemoBackend.adminEmail, DemoBackend.adminPassword);
+    final barber = (await backend.fetchBarbers()).first;
+    final service = (await backend.fetchServices()).first;
+
+    // cliente con account: l'appuntamento compare nella sua app
+    final s1 = await freeSlot(barber, service, DateTime.now().add(const Duration(hours: 3)));
+    final forUser = await backend.book(
+      barberId: barber.id,
+      serviceId: service.id,
+      start: s1,
+      customerUserId: client.id,
+    );
+    expect(forUser.userId, client.id);
+    expect(forUser.customerName, 'Mario Rossi');
+
+    // nuovo cliente dal banco con email
+    final s2 = await freeSlot(barber, service, forUser.end);
+    final walkIn = await backend.book(
+      barberId: barber.id,
+      serviceId: service.id,
+      start: s2,
+      customerName: 'Nuovo Cliente',
+      customerPhone: '3337778899',
+      customerEmail: 'nuovo@test.it',
+    );
+    expect((walkIn.userId, walkIn.customerPhone, walkIn.customerEmail), (null, '+393337778899', 'nuovo@test.it'));
+
+    // senza dati
+    final s3 = await freeSlot(barber, service, walkIn.end);
+    final quick = await backend.book(barberId: barber.id, serviceId: service.id, start: s3, customerName: 'Cliente');
+    expect((quick.userId, quick.customerName, quick.customerPhone), (null, 'Cliente', ''));
+
+    await backend.signOut();
+    await backend.signInWithEmail('cliente.app@test.it', 'segreta1');
+    expect((await backend.myAppointments()).any((x) => x.id == forUser.id), isTrue);
+  });
+
   test('amministratori: email aggiunta diventa admin', () async {
     await signUp('socio@test.it');
     await backend.signOut();

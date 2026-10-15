@@ -22,6 +22,9 @@ class AppState extends ChangeNotifier {
 
   bool get isSignedIn => backend.isSignedIn;
   bool get isAdmin => profile?.isAdmin ?? false;
+
+  /// Collegato da ospite (prenotazione senza account).
+  bool get isGuest => isSignedIn && backend.isGuest;
   bool get needsProfile => isSignedIn && !(profile?.isComplete ?? false);
 
   Appointment? get nextAppointment {

@@ -43,6 +43,9 @@ class SupabaseBackend implements Backend {
     if (m.contains('email not confirmed')) return 'Conferma prima la tua email (controlla la posta)';
     if (m.contains('password')) return 'La password deve avere almeno 6 caratteri';
     if (m.contains('rate limit')) return 'Troppi tentativi, riprova tra qualche minuto';
+    if (m.contains('anonymous')) {
+      return 'La prenotazione senza account non e\' ancora attiva: accedi o registrati';
+    }
     return e.message;
   }
 
@@ -74,6 +77,38 @@ class SupabaseBackend implements Backend {
       },
     );
     return res.session != null;
+  });
+
+  @override
+  bool get isGuest => _db.auth.currentUser?.isAnonymous ?? false;
+
+  @override
+  Future<void> signInAsGuest({
+    required String fullName,
+    required String phone,
+    String email = '',
+    bool marketingOptIn = false,
+  }) => _guard(() async {
+    // accesso anonimo di Supabase: i dati vanno nel profilo tramite il
+    // trigger handle_new_user (come per la registrazione)
+    await _db.auth.signInAnonymously(
+      data: {
+        'full_name': fullName.trim(),
+        'phone': normalizePhone(phone),
+        'contact_email': email.trim(),
+        'privacy_accepted': true,
+        'marketing_opt_in': marketingOptIn,
+      },
+    );
+  });
+
+  @override
+  Future<bool> upgradeGuest({required String email, required String password}) => _guard(() async {
+    // l'utente resta lo stesso: appuntamenti e storico restano suoi
+    final res = await _db.auth.updateUser(UserAttributes(email: email.trim()), emailRedirectTo: _redirect);
+    if (res.user?.emailConfirmedAt == null) return false; // serve confermare l'email
+    await _db.auth.updateUser(UserAttributes(password: password));
+    return true;
   });
 
   @override
@@ -243,6 +278,8 @@ class SupabaseBackend implements Backend {
     String notes = '',
     String? customerName,
     String? customerPhone,
+    String? customerEmail,
+    String? customerUserId,
   }) => _guard(() async {
     final row = await _db.rpc(
       'book_appointment',
@@ -253,6 +290,8 @@ class SupabaseBackend implements Backend {
         'p_notes': notes,
         'p_customer_name': customerName,
         'p_customer_phone': customerPhone == null ? null : normalizePhone(customerPhone),
+        'p_customer_email': customerEmail,
+        'p_user': customerUserId,
       },
     ) as Map<String, dynamic>;
     return Appointment.fromJson(row);

@@ -32,6 +32,23 @@ abstract class Backend {
     required String phone,
     bool marketingOptIn = false,
   });
+  /// Accesso da ospite (senza account): si prenota con nome, cognome,
+  /// cellulare ed email facoltativa. L'ospite puo' poi creare l'account
+  /// con [upgradeGuest] mantenendo i suoi appuntamenti.
+  Future<void> signInAsGuest({
+    required String fullName,
+    required String phone,
+    String email = '',
+    bool marketingOptIn = false,
+  });
+
+  /// L'utente collegato e' un ospite (accesso senza account)?
+  bool get isGuest;
+
+  /// Trasforma l'ospite in account con email e password. Ritorna false se
+  /// serve prima confermare l'email (link inviato).
+  Future<bool> upgradeGuest({required String email, required String password});
+
   Future<void> signInWithGoogle();
   Future<void> signInWithApple();
   Future<void> resetPassword(String email);
@@ -71,6 +88,10 @@ abstract class Backend {
     String notes = '',
     String? customerName,
     String? customerPhone,
+    String? customerEmail,
+
+    /// Solo admin: prenota per un cliente con account (compare nella sua app).
+    String? customerUserId,
   });
   Future<void> cancelAppointment(String id);
 

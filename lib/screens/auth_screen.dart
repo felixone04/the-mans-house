@@ -5,6 +5,7 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'complete_profile_screen.dart';
+import 'guest_screen.dart';
 import 'privacy_screen.dart';
 
 /// Apre login/registrazione e, se serve, il completamento profilo.
@@ -21,8 +22,52 @@ Future<bool> openAuthFlow(BuildContext context) async {
   return state.isSignedIn && !state.needsProfile;
 }
 
+/// Prima di prenotare: chi non e' collegato sceglie tra account e ospite
+/// (nome, cognome, cellulare, email facoltativa). Ritorna true se si puo'
+/// procedere con la prenotazione.
+Future<bool> openBookingAuth(BuildContext context) async {
+  final state = AppScope.read(context);
+  if (state.isSignedIn) return openAuthFlow(context);
+  final choice = await showModalBottomSheet<String>(
+    context: context,
+    constraints: const BoxConstraints(maxWidth: 520),
+    builder: (c) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Come vuoi prenotare?', style: slab(size: 20, weight: FontWeight.w600, spacing: 0.3)),
+            const SizedBox(height: 6),
+            const Text(
+              'Con l\'account la prossima volta prenoti con un tocco e ritrovi i tuoi appuntamenti.',
+              style: TextStyle(color: AppColors.muted, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            PrimaryButton(label: 'Accedi o registrati', icon: Icons.person, onPressed: () => Navigator.pop(c, 'account')),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.pop(c, 'guest'),
+              icon: const Icon(Icons.flash_on_outlined, size: 18),
+              label: const Text('Continua senza account'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  if (!context.mounted || choice == null) return false;
+  if (choice == 'account') return openAuthFlow(context);
+  final ok = await Navigator.of(context).push<bool>(fadeRoute(const GuestScreen()));
+  return ok == true && state.isSignedIn;
+}
+
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
+  const AuthScreen({super.key, this.startRegister = false});
+
+  /// Apre direttamente la registrazione.
+  final bool startRegister;
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -34,7 +79,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final _phone = TextEditingController(text: '+39 ');
   final _email = TextEditingController();
   final _password = TextEditingController();
-  bool _register = false;
+  late bool _register = widget.startRegister;
   bool _loading = false;
   bool _obscure = true;
   bool _privacy = false;
