@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../data/phone_notifier.dart';
 import '../data/slots.dart';
 import '../models.dart';
+import '../notifications.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -321,6 +323,7 @@ class _BookingScreenState extends State<BookingScreen> {
     if (barber == null) return;
     setState(() => _booking = true);
     try {
+      _state.ownChanges.add(widget.reschedule!.id);
       await _state.backend.rescheduleAppointment(widget.reschedule!.id, barberId: barber.id, start: _slot!);
       if (!widget.adminMode) await _state.refreshAppointments();
       if (!mounted) return;
@@ -375,6 +378,12 @@ class _BookingScreenState extends State<BookingScreen> {
         Navigator.of(context).pop(true);
       } else {
         await _state.refreshAppointments();
+        // sul telefono resta anche la notifica «Prenotazione confermata»
+        final c = NotifSettings.fromJson(_state.settings.notifications).build(
+          NotifKind.bookingConfirmed,
+          notifValues(appt, _state.settings, clientName: _state.profile?.fullName ?? ''),
+        );
+        if (c != null) PhoneNotifier.instance.showNow(notifId(appt.id, NotifKind.bookingConfirmed), c);
         if (!mounted) return;
         Navigator.of(context).pushReplacement(fadeRoute(BookingSuccessScreen(appointment: appt)));
       }

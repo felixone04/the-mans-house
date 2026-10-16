@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../state/app_state.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
+import '../../widgets/event_watchers.dart';
 import 'agenda_tab.dart';
 import 'barbers_tab.dart';
 import 'customers_tab.dart';
@@ -32,6 +33,8 @@ class _AdminScreenState extends State<AdminScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadLowStock();
       _loadWaiting();
+      // novita' dall'ultima apertura: prenotazioni, annullamenti, lista d'attesa, magazzino
+      checkShopEvents(context);
     });
   }
 

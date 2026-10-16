@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'config.dart';
 import 'data/backend.dart';
 import 'data/demo_backend.dart';
+import 'data/phone_notifier.dart';
 import 'data/supabase_backend.dart';
 import 'screens/splash_screen.dart';
 import 'state/app_state.dart';
@@ -26,8 +27,23 @@ Future<void> main() async {
 
   final Backend backend = AppConfig.hasSupabase ? SupabaseBackend() : DemoBackend();
   await backend.init();
+  final state = AppState(backend);
 
-  runApp(BarberApp(state: AppState(backend)));
+  // notifiche sul telefono: «Ci sono» conferma la presenza senza aprire nulla
+  // d'altro; gli altri tocchi aprono l'app e aggiornano gli appuntamenti
+  PhoneNotifier.instance.onResponse = (action, appointmentId) async {
+    try {
+      if (action == PhoneNotifier.actionConfirm && appointmentId != null) {
+        await backend.confirmAttendance(appointmentId);
+      }
+      await state.refreshAppointments();
+    } catch (_) {
+      // se non riesce, la domanda resta nella home
+    }
+  };
+  await PhoneNotifier.instance.init();
+
+  runApp(BarberApp(state: state));
 }
 
 class BarberApp extends StatelessWidget {

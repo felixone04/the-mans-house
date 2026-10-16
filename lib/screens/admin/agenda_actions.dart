@@ -131,7 +131,10 @@ mixin AgendaActions<T extends StatefulWidget> on State<T> {
       if (!ok || !mounted) return;
     }
     try {
-      await AppScope.read(context).backend.setAppointmentStatus(a.id, s);
+      final state = AppScope.read(context);
+      // annullato dal negozio: niente avviso «ha annullato» al negozio stesso
+      if (s == AppointmentStatus.cancelled) state.ownChanges.add(a.id);
+      await state.backend.setAppointmentStatus(a.id, s);
       await reloadAgenda();
     } catch (e) {
       if (mounted) showError(context, e);

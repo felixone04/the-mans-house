@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../data/backend.dart';
+import '../data/phone_notifier.dart';
 import '../models.dart';
 
 /// Stato globale: profilo utente, impostazioni, servizi e barbieri.
@@ -19,6 +20,10 @@ class AppState extends ChangeNotifier {
   List<Service> services = [];
   List<Barber> barbers = [];
   List<Appointment> myAppointments = [];
+
+  /// Appuntamenti spostati o annullati da chi usa l'app in questa sessione:
+  /// per questi non si mostra l'avviso «spostato/annullato».
+  final ownChanges = <String>{};
 
   bool get isSignedIn => backend.isSignedIn;
   bool get isAdmin => profile?.isAdmin ?? false;
@@ -76,17 +81,30 @@ class AppState extends ChangeNotifier {
       // la rete puo' non essere disponibile: manteniamo lo stato precedente
     }
     notifyListeners();
+    _syncPhone();
   }
 
   Future<void> refreshAppointments() async {
     myAppointments = backend.isSignedIn ? await backend.myAppointments() : [];
     notifyListeners();
+    _syncPhone();
+  }
+
+  /// Promemoria, conferma presenza e voto programmati sul telefono del cliente.
+  void _syncPhone() {
+    if (!backend.isSignedIn || isAdmin) {
+      PhoneNotifier.instance.cancelAll();
+      return;
+    }
+    PhoneNotifier.instance.reschedule(myAppointments, settings, clientName: profile?.fullName ?? '');
   }
 
   Future<void> signOut() async {
     await backend.signOut();
     profile = null;
     myAppointments = [];
+    ownChanges.clear();
+    PhoneNotifier.instance.cancelAll();
     notifyListeners();
   }
 

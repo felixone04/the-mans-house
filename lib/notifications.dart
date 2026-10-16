@@ -369,6 +369,113 @@ bool needsReview(Appointment a, NotifSettings n, DateTime now) {
   return !now.isBefore(from) && now.difference(a.end) < const Duration(days: 7);
 }
 
+/// Notifica da programmare sul telefono.
+class PlannedNotif {
+  const PlannedNotif({required this.id, required this.at, required this.content, required this.appointmentId});
+  final int id;
+  final DateTime at;
+  final NotifContent content;
+  final String appointmentId;
+  NotifKind get kind => content.type.kind;
+}
+
+/// Numero della notifica sul telefono: stabile per appuntamento e tipo, cosi'
+/// riprogrammando non si creano doppioni.
+int notifId(String appointmentId, NotifKind k) => ((appointmentId.hashCode & 0x3FFFFFF) << 3) | (k.index & 7);
+
+/// Promemoria, conferma presenza e voto degli appuntamenti del cliente,
+/// con i testi e i tempi scelti dal negozio. Solo quelli ancora da arrivare.
+List<PlannedNotif> planNotifications(
+  List<Appointment> mine,
+  ShopSettings s,
+  DateTime now, {
+  String clientName = '',
+}) {
+  final n = NotifSettings.fromJson(s.notifications);
+  final out = <PlannedNotif>[];
+  void add(Appointment a, NotifKind k, DateTime at) {
+    if (!at.isAfter(now)) return;
+    final c = n.build(k, notifValues(a, s, clientName: clientName));
+    if (c != null) out.add(PlannedNotif(id: notifId(a.id, k), at: at, content: c, appointmentId: a.id));
+  }
+
+  for (final a in mine) {
+    if (a.status == AppointmentStatus.confirmed && a.start.isAfter(now)) {
+      add(a, NotifKind.reminderDay, a.start.subtract(Duration(minutes: n.offset(NotifKind.reminderDay))));
+      add(a, NotifKind.reminderHour, a.start.subtract(Duration(minutes: n.offset(NotifKind.reminderHour))));
+      if (a.attendanceConfirmedAt == null) {
+        final ask = attendanceAskFrom(a, n);
+        // se quell'ora e' gia' passata la domanda compare comunque nella home
+        if (ask.isBefore(a.start)) add(a, NotifKind.attendanceCheck, ask);
+      }
+    }
+    if (a.reviewStars == null && a.status != AppointmentStatus.cancelled && a.status != AppointmentStatus.noShow) {
+      add(a, NotifKind.review, a.end.add(Duration(minutes: n.offset(NotifKind.review))));
+    }
+  }
+  out.sort((x, y) => x.at.compareTo(y.at));
+  return out;
+}
+
+/// Fotografia degli appuntamenti (id -> stato|inizio|barbiere) per capire
+/// alla prossima apertura cosa e' cambiato.
+Map<String, String> apptSnapshot(Iterable<Appointment> list) => {
+  for (final a in list) a.id: '${a.status.name}|${a.start.toIso8601String()}|${a.barberId}',
+};
+
+/// Novita' per il cliente dall'ultima volta: posto dalla lista d'attesa,
+/// appuntamento spostato o annullato dal negozio. Le modifiche fatte da lui
+/// in questa sessione ([own]) non contano. Senza fotografia precedente: niente.
+List<(NotifKind, Appointment)> clientEvents(
+  Map<String, String>? before,
+  List<Appointment> now,
+  Set<String> own,
+  DateTime at,
+) {
+  if (before == null) return const [];
+  final out = <(NotifKind, Appointment)>[];
+  for (final a in now) {
+    final prev = before[a.id];
+    if (!a.start.isAfter(at) || own.contains(a.id)) continue;
+    if (prev == null) {
+      if (a.status == AppointmentStatus.confirmed && a.notes.startsWith('Dalla lista d')) {
+        out.add((NotifKind.waitlistAssigned, a));
+      }
+      continue;
+    }
+    final p = prev.split('|');
+    if (p[0] == AppointmentStatus.confirmed.name && a.status == AppointmentStatus.cancelled) {
+      out.add((NotifKind.cancelled, a));
+    } else if (a.status == AppointmentStatus.confirmed &&
+        (p[1] != a.start.toIso8601String() || p[2] != a.barberId)) {
+      out.add((NotifKind.moved, a));
+    }
+  }
+  return out;
+}
+
+/// Novita' per il negozio dall'ultima apertura: prenotazioni nuove fatte dai
+/// clienti e prenotazioni annullate (non quelle toccate in questa sessione).
+List<(NotifKind, Appointment)> shopEvents(
+  Map<String, String>? before,
+  List<Appointment> now,
+  Set<String> own,
+  DateTime at,
+) {
+  if (before == null) return const [];
+  final out = <(NotifKind, Appointment)>[];
+  for (final a in now) {
+    if (!a.start.isAfter(at) || own.contains(a.id)) continue;
+    final prev = before[a.id];
+    if (prev == null) {
+      if (a.status == AppointmentStatus.confirmed && !a.createdByAdmin) out.add((NotifKind.newBooking, a));
+    } else if (prev.startsWith('${AppointmentStatus.confirmed.name}|') && a.status == AppointmentStatus.cancelled) {
+      out.add((NotifKind.bookingCancelled, a));
+    }
+  }
+  return out;
+}
+
 /// Notifica in stile essenziale: icona tonda nel colore del tipo, nome
 /// dell'app, titolo e testo, eventuali pulsanti.
 class NotificationCard extends StatelessWidget {

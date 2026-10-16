@@ -123,6 +123,7 @@ class _AccountScreenState extends State<AccountScreen> {
     if (!ok || !mounted) return;
     final state = AppScope.read(context);
     try {
+      state.ownChanges.add(a.id);
       await state.backend.cancelAppointment(a.id);
       await state.refreshAppointments();
       if (mounted) showMessage(context, 'Appuntamento annullato');

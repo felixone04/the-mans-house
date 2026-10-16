@@ -6,6 +6,7 @@ import '../notifications.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/event_watchers.dart';
 import 'account_screen.dart';
 import 'admin/admin_screen.dart';
 import 'auth_screen.dart';
@@ -45,6 +46,8 @@ class HomeScreen extends StatelessWidget {
             children: [
               // dopo il taglio chiede il voto (una volta sola per appuntamento)
               const ReviewPrompter(),
+              // avvisi in alto: posto dalla lista d'attesa, spostamenti, chiusure
+              const ClientEventWatcher(),
               const SizedBox(height: 10),
               Row(
                 children: [
@@ -434,6 +437,7 @@ class _NextAppointmentCard extends StatelessWidget {
     if (!ok || !context.mounted) return;
     final state = AppScope.read(context);
     try {
+      state.ownChanges.add(a.id);
       await state.backend.cancelAppointment(a.id);
       await state.refreshAppointments();
       if (context.mounted) showMessage(context, 'Appuntamento annullato');
