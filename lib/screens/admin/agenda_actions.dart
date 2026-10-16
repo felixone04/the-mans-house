@@ -32,7 +32,8 @@ List<(int, int)> freeRanges(
   final from = day == today ? ((minuteOf(now) + 4) ~/ 5) * 5 : 0;
   final busy = <(int, int)>[
     for (final a in appointments.where((a) => a.barberId == b.id && a.status != AppointmentStatus.cancelled))
-      (minuteOf(a.start), minuteOf(a.start) + a.end.difference(a.start).inMinutes),
+      // servizi con posa: libero dopo il tempo iniziale
+      (minuteOf(a.start), minuteOf(a.start) + a.busyEnd.difference(a.start).inMinutes),
     for (final t in off) offRangeIn(day, t),
   ]..sort((x, y) => x.$1.compareTo(y.$1));
   final result = <(int, int)>[];

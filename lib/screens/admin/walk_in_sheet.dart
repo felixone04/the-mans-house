@@ -66,12 +66,20 @@ class _WalkInSheetState extends State<_WalkInSheet> {
     final state = AppScope.read(context);
     final today = dayOnly(DateTime.now());
     if (_barber != null) {
-      final slots = availableSlots(barber: _barber!, durationMin: s.durationMin, day: today, busy: busy, stepMin: 5);
+      final slots = availableSlots(
+        barber: _barber!,
+        durationMin: s.durationMin,
+        busyMin: s.busyDuration,
+        day: today,
+        busy: busy,
+        stepMin: 5,
+      );
       return slots.isEmpty ? null : (slots.first, _barber!);
     }
     final any = availableSlotsAnyBarber(
       barbers: state.barbers,
       durationMin: s.durationMin,
+      busyMin: s.busyDuration,
       day: today,
       busy: busy,
       stepMin: 5,

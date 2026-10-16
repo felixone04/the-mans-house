@@ -3,23 +3,28 @@ import '../models.dart';
 DateTime dayOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
 /// Calcola gli orari liberi di un barbiere in un giorno.
+/// Il servizio deve stare tutto dentro l'orario di lavoro ([durationMin]),
+/// ma il barbiere deve essere libero solo per [busyMin] minuti (servizi con
+/// posa, es. colore); se null, per tutta la durata.
 List<DateTime> availableSlots({
   required Barber barber,
   required int durationMin,
   required DateTime day,
   required List<BusyInterval> busy,
   required int stepMin,
+  int? busyMin,
   DateTime? now,
 }) {
   final current = now ?? DateTime.now();
   final d = dayOnly(day);
   final mine = busy.where((b) => b.barberId == barber.id).toList();
   final result = <DateTime>[];
+  final busyLen = busyMin == null || busyMin > durationMin ? durationMin : busyMin;
 
   for (final h in barber.hoursOn(d)) {
     for (var m = h.start; m + durationMin <= h.end; m += stepMin) {
       final start = DateTime(d.year, d.month, d.day, 0, m);
-      final end = start.add(Duration(minutes: durationMin));
+      final end = start.add(Duration(minutes: busyLen));
       if (!start.isAfter(current)) continue;
       final overlaps = mine.any((b) => b.start.isBefore(end) && b.end.isAfter(start));
       if (!overlaps) result.add(start);
@@ -78,6 +83,7 @@ Map<DateTime, Barber> availableSlotsAnyBarber({
   required DateTime day,
   required List<BusyInterval> busy,
   required int stepMin,
+  int? busyMin, // servizi con posa: minuti in cui il barbiere e' occupato
   DateTime? now, // per i test: altrimenti l'ora corrente
 }) {
   final d = dayOnly(day);
@@ -92,6 +98,7 @@ Map<DateTime, Barber> availableSlotsAnyBarber({
       day: d,
       busy: busy,
       stepMin: stepMin,
+      busyMin: busyMin,
       now: now,
     )) {
       candidates.putIfAbsent(s, () => []).add(b);

@@ -90,6 +90,7 @@ class _BookingScreenState extends State<BookingScreen> {
         name: a.serviceName,
         durationMin: a.end.difference(a.start).inMinutes,
         price: a.price,
+        busyMin: a.busyMin,
       );
       _step = 1;
     }
@@ -123,7 +124,9 @@ class _BookingScreenState extends State<BookingScreen> {
       if (moving != null) {
         // l'appuntamento da spostare non occupa il suo stesso orario
         _busy = _busy!
-            .where((b) => b.timeOff || b.barberId != moving.barberId || b.start != moving.start || b.end != moving.end)
+            .where(
+              (b) => b.timeOff || b.barberId != moving.barberId || b.start != moving.start || b.end != moving.busyEnd,
+            )
             .toList();
       }
       _computeAvailability();
@@ -160,12 +163,28 @@ class _BookingScreenState extends State<BookingScreen> {
   void _computeAvailability() {
     final step = _state.settings.slotStepMin;
     final dur = _service!.durationMin;
+    // servizi con posa: il barbiere serve solo per il tempo iniziale
+    final busyMin = _service!.busyDuration;
     _availability = {
       for (final d in _days)
         d: _anyBarber
-            ? availableSlotsAnyBarber(barbers: _state.barbers, durationMin: dur, day: d, busy: _busy!, stepMin: step)
+            ? availableSlotsAnyBarber(
+                barbers: _state.barbers,
+                durationMin: dur,
+                busyMin: busyMin,
+                day: d,
+                busy: _busy!,
+                stepMin: step,
+              )
             : {
-                for (final s in availableSlots(barber: _barber!, durationMin: dur, day: d, busy: _busy!, stepMin: step))
+                for (final s in availableSlots(
+                  barber: _barber!,
+                  durationMin: dur,
+                  busyMin: busyMin,
+                  day: d,
+                  busy: _busy!,
+                  stepMin: step,
+                ))
                   s: _barber!,
               },
     };

@@ -119,7 +119,7 @@ class _AgendaTabState extends State<AgendaTab> with AgendaActions {
     }
     for (final a in items) {
       final s = _minuteOf(a.start);
-      final e = s + a.end.difference(a.start).inMinutes;
+      final e = s + a.busyEnd.difference(a.start).inMinutes;
       if (s < start) start = s;
       if (e > end) end = e;
     }
@@ -875,7 +875,8 @@ class _DayCalendarState extends State<_DayCalendar> {
   double _blockHeight(List<Appointment> mine, int i) {
     final a = mine[i];
     final top = _y(_minuteOf(a.start)) + 1;
-    var h = a.end.difference(a.start).inMinutes * ppm - 2;
+    // servizi con posa: il blocco copre solo il tempo iniziale, come un taglio normale
+    var h = a.busyEnd.difference(a.start).inMinutes * ppm - 2;
     if (h < _DayCalendar.minBlock) h = _DayCalendar.minBlock;
     if (i + 1 < mine.length) {
       final room = _y(_minuteOf(mine[i + 1].start)) - top - 1;

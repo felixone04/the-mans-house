@@ -78,10 +78,16 @@ class Service {
   String id;
   String name;
   String description;
+  /// Tempo totale: e' quello che vede il cliente.
   int durationMin;
   double price;
   bool active;
   int sortOrder;
+
+  /// Servizi con tempo di posa (es. colore): minuti iniziali in cui il
+  /// barbiere e' occupato. Dopo e' libero per altri clienti, mentre il cliente
+  /// resta in posa fino al tempo totale. null = occupato per tutto il servizio.
+  int? busyMin;
 
   Service({
     this.id = '',
@@ -91,7 +97,14 @@ class Service {
     required this.price,
     this.active = true,
     this.sortOrder = 0,
+    this.busyMin,
   });
+
+  /// Ha un tempo di posa (barbiere libero prima della fine)?
+  bool get hasPosa => busyMin != null && busyMin! < durationMin;
+
+  /// Minuti in cui il barbiere e' occupato.
+  int get busyDuration => hasPosa ? busyMin! : durationMin;
 
   factory Service.fromJson(Map<String, dynamic> j) => Service(
     id: j['id'],
@@ -101,6 +114,7 @@ class Service {
     price: _num(j['price']),
     active: j['active'] ?? true,
     sortOrder: j['sort_order'] ?? 0,
+    busyMin: (j['busy_min'] as num?)?.toInt(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -108,6 +122,7 @@ class Service {
     'name': name,
     'description': description,
     'duration_min': durationMin,
+    'busy_min': hasPosa ? busyMin : null,
     'price': price,
     'active': active,
     'sort_order': sortOrder,
@@ -485,6 +500,16 @@ class Appointment {
   /// Extra: accettato dalla lista d'attesa anche se l'orario era pieno.
   bool extra;
 
+  /// Servizi con posa: minuti in cui il barbiere e' occupato (null = tutto).
+  int? busyMin;
+
+  /// Fine del lavoro del barbiere: dopo e' libero anche se il cliente e' in posa.
+  DateTime get busyEnd {
+    final b = busyMin;
+    final total = end.difference(start).inMinutes;
+    return b == null || b >= total ? end : start.add(Duration(minutes: b));
+  }
+
   Appointment({
     required this.id,
     this.userId,
@@ -506,6 +531,7 @@ class Appointment {
     this.amountPaid = 0,
     this.productsTotal = 0,
     this.extra = false,
+    this.busyMin,
   });
 
   factory Appointment.fromJson(Map<String, dynamic> j) => Appointment(
@@ -529,6 +555,7 @@ class Appointment {
     amountPaid: _num(j['amount_paid']),
     productsTotal: _num(j['products_total']),
     extra: j['overbooked'] ?? false,
+    busyMin: (j['busy_min'] as num?)?.toInt(),
   );
 
   bool get isUpcoming => status == AppointmentStatus.confirmed && start.isAfter(DateTime.now());
@@ -572,7 +599,13 @@ class WaitlistEntry {
     this.appointmentId,
     required this.createdAt,
     this.position,
+    this.busyMin,
   });
+
+  /// Servizi con posa: minuti in cui il barbiere e' occupato (null = tutto).
+  final int? busyMin;
+
+  int get busyDuration => busyMin != null && busyMin! < durationMin ? busyMin! : durationMin;
 
   final String id;
   final String userId;
@@ -622,6 +655,7 @@ class WaitlistEntry {
     appointmentId: j['appointment_id'],
     createdAt: _dt(j['created_at']),
     position: (j['position'] as num?)?.toInt(),
+    busyMin: (j['busy_min'] as num?)?.toInt(),
   );
 }
 

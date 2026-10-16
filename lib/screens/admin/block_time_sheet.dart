@@ -110,7 +110,7 @@ class _BlockTimeSheetState extends State<_BlockTimeSheet> {
                 a.barberId == _barber!.id &&
                 a.status == AppointmentStatus.confirmed &&
                 a.start.isBefore(_to) &&
-                a.end.isAfter(_from))
+                a.busyEnd.isAfter(_from))
             .length;
 
   Future<void> _save() async {

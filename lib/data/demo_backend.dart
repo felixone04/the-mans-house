@@ -103,6 +103,16 @@ class DemoBackend implements Backend {
         price: 10,
         sortOrder: 6,
       ),
+      // con posa: il barbiere lavora i primi 30 minuti, poi e' libero
+      Service(
+        id: _id(),
+        name: 'Colore',
+        description: 'Colorazione con tempo di posa',
+        durationMin: 180,
+        price: 40,
+        sortOrder: 7,
+        busyMin: 30,
+      ),
     ]);
 
     List<WorkingHours> std() => [
@@ -580,15 +590,17 @@ class DemoBackend implements Backend {
   // --- Prenotazioni ---
 
   @override
-  Future<List<BusyInterval>> fetchBusy(DateTime from, DateTime to) => _delay(
-    () => [
-      for (final a in _appointments)
-        if (a.status == AppointmentStatus.confirmed && a.start.isBefore(to) && a.end.isAfter(from))
-          BusyInterval(a.barberId, a.start, a.end),
-      for (final t in _timeOff)
-        if (t.start.isBefore(to) && t.end.isAfter(from)) BusyInterval(t.barberId, t.start, t.end, timeOff: true),
-    ],
-  );
+  Future<List<BusyInterval>> fetchBusy(DateTime from, DateTime to) => _delay(() => _busyBetween(from, to));
+
+  /// Occupato = appuntamenti confermati (solo il tempo di lavoro del barbiere:
+  /// nei servizi con posa, dopo il tempo iniziale e' libero) + ferie.
+  List<BusyInterval> _busyBetween(DateTime from, DateTime to) => [
+    for (final a in _appointments)
+      if (a.status == AppointmentStatus.confirmed && a.start.isBefore(to) && a.busyEnd.isAfter(from))
+        BusyInterval(a.barberId, a.start, a.busyEnd),
+    for (final t in _timeOff)
+      if (t.start.isBefore(to) && t.end.isAfter(from)) BusyInterval(t.barberId, t.start, t.end, timeOff: true),
+  ];
 
   @override
   Future<Appointment> book({
@@ -614,6 +626,7 @@ class DemoBackend implements Backend {
     final ok = availableSlots(
       barber: barber,
       durationMin: service.durationMin,
+      busyMin: service.busyDuration,
       day: start,
       busy: busy,
       stepMin: 1,
@@ -641,6 +654,7 @@ class DemoBackend implements Backend {
       customerEmail: owner?.email ?? (customerEmail ?? '').trim(),
       notes: notes,
       createdByAdmin: byAdmin,
+      busyMin: service.hasPosa ? service.busyMin : null,
     );
     _appointments.add(a);
     return a;
@@ -690,10 +704,11 @@ class DemoBackend implements Backend {
     final busy = (await fetchBusy(
       dayOnly(start),
       dayOnly(start).add(const Duration(days: 1)),
-    )).where((b) => b.timeOff || b.barberId != a.barberId || b.start != a.start || b.end != a.end).toList();
+    )).where((b) => b.timeOff || b.barberId != a.barberId || b.start != a.start || b.end != a.busyEnd).toList();
     final ok = availableSlots(
       barber: barber,
       durationMin: duration.inMinutes,
+      busyMin: a.busyMin,
       day: start,
       busy: busy,
       stepMin: 1,
@@ -711,17 +726,18 @@ class DemoBackend implements Backend {
 
   final _waitlist = <WaitlistEntry>[];
 
-  /// Il barbiere e' libero per [minutes] da [start]? (stesse regole della prenotazione)
-  bool _isFree(Barber b, DateTime start, int minutes) {
+  /// Il barbiere e' libero per [minutes] da [start]? (stesse regole della prenotazione;
+  /// [busyMin] per i servizi con posa)
+  bool _isFree(Barber b, DateTime start, int minutes, {int? busyMin}) {
     final from = dayOnly(start), to = from.add(const Duration(days: 1));
-    final busy = [
-      for (final a in _appointments)
-        if (a.status == AppointmentStatus.confirmed && a.start.isBefore(to) && a.end.isAfter(from))
-          BusyInterval(a.barberId, a.start, a.end),
-      for (final t in _timeOff)
-        if (t.start.isBefore(to) && t.end.isAfter(from)) BusyInterval(t.barberId, t.start, t.end, timeOff: true),
-    ];
-    return availableSlots(barber: b, durationMin: minutes, day: start, busy: busy, stepMin: 1).contains(start);
+    return availableSlots(
+      barber: b,
+      durationMin: minutes,
+      busyMin: busyMin,
+      day: start,
+      busy: _busyBetween(from, to),
+      stepMin: 1,
+    ).contains(start);
   }
 
   /// Come promote_waitlist sul server: i posti liberi vanno ai primi in lista.
@@ -732,7 +748,7 @@ class DemoBackend implements Backend {
     for (final w in queue) {
       final barber = _barbers
           .where((b) => b.active && (w.barberId == null || b.id == w.barberId))
-          .where((b) => _isFree(b, w.start, w.durationMin))
+          .where((b) => _isFree(b, w.start, w.durationMin, busyMin: w.busyDuration))
           .firstOrNull;
       if (barber == null) continue;
       final a = _appointmentFor(w, barber, notes: 'Dalla lista d\'attesa');
@@ -758,6 +774,7 @@ class DemoBackend implements Backend {
     notes: notes,
     createdByAdmin: extra,
     extra: extra,
+    busyMin: w.busyMin,
   );
 
   int _position(WaitlistEntry w) =>
@@ -783,7 +800,10 @@ class DemoBackend implements Backend {
             orElse: () => throw AppException('Servizio non disponibile'));
         if (!start.isAfter(DateTime.now())) throw AppException('Orario gia\' passato');
         if (_barbers.any(
-          (b) => b.active && (barberId == null || b.id == barberId) && _isFree(b, start, service.durationMin),
+          (b) =>
+              b.active &&
+              (barberId == null || b.id == barberId) &&
+              _isFree(b, start, service.durationMin, busyMin: service.busyDuration),
         )) {
           throw AppException('L\'orario e\' libero: puoi prenotarlo subito');
         }
@@ -804,6 +824,7 @@ class DemoBackend implements Backend {
           barberName: barber?.name ?? '',
           start: start,
           createdAt: DateTime.now().add(Duration(microseconds: _waitSeq++)),
+          busyMin: service.hasPosa ? service.busyMin : null,
         );
         _waitlist.add(w);
         return w;

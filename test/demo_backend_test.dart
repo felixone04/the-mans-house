@@ -387,6 +387,31 @@ void main() {
     expect((await saved()).total, service.price);
   });
 
+  test('colore con posa: durante la posa il barbiere prende altri clienti', () async {
+    await signUp('colore@test.it');
+    final barber = (await backend.fetchBarbers()).first;
+    final services = await backend.fetchServices();
+    final colore = services.firstWhere((s) => s.hasPosa);
+    final taglio = services.firstWhere((s) => s.name == 'Taglio');
+    final start = await freeSlot(barber, colore, DateTime.now().add(const Duration(days: 1)));
+    final c = await backend.book(barberId: barber.id, serviceId: colore.id, start: start);
+    // il cliente vede il tempo totale
+    expect(c.end.difference(c.start).inMinutes, colore.durationMin);
+    // subito dopo il tempo iniziale lo stesso barbiere e' libero per un taglio
+    final after = start.add(Duration(minutes: colore.busyMin!));
+    final busy = await backend.fetchBusy(dayOnly(start), dayOnly(start).add(const Duration(days: 1)));
+    final free = availableSlots(barber: barber, durationMin: taglio.durationMin, day: start, busy: busy, stepMin: 5);
+    if (free.contains(after)) {
+      final t = await backend.book(barberId: barber.id, serviceId: taglio.id, start: after);
+      expect(t.barberId, barber.id);
+    }
+    // nel tempo iniziale invece no
+    await expectLater(
+      () => backend.book(barberId: barber.id, serviceId: taglio.id, start: start.add(const Duration(minutes: 10))),
+      throwsA(isA<AppException>()),
+    );
+  });
+
   test('lista d\'attesa: solo numeri al cliente, posto assegnato al primo, extra accettato dall\'admin', () async {
     final barber = (await backend.fetchBarbers()).first;
     final service = (await backend.fetchServices()).first;

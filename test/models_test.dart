@@ -119,6 +119,42 @@ void main() {
     expect(ics, contains('TRIGGER:-PT1H'));
   });
 
+  test('tempo di posa: barbiere occupato solo il tempo iniziale, servizio intero in orario', () {
+    final b = Barber(id: 'b1', name: 'Antonio', hours: [WorkingHours(weekday: 2, start: 540, end: 1200)]);
+    final day = DateTime(2026, 10, 20);
+    final past = DateTime(2026, 10, 1);
+    DateTime at(int h, [int m = 0]) => DateTime(2026, 10, 20, h, m);
+    // colore alle 10:00: 3 ore in tutto, Antonio occupato solo 10:00-10:30
+    final colore = Appointment(
+      id: 'c',
+      barberId: 'b1',
+      serviceName: 'Colore',
+      price: 40,
+      start: at(10),
+      end: at(13),
+      busyMin: 30,
+    );
+    expect(colore.busyEnd, at(10, 30));
+    final busy = [BusyInterval('b1', colore.start, colore.busyEnd)];
+    List<DateTime> free(int dur, {int? busyMin}) =>
+        availableSlots(barber: b, durationMin: dur, busyMin: busyMin, day: day, busy: busy, stepMin: 30, now: past);
+    // durante la posa si prenotano altri servizi: un taglio alle 11 e un taglio + barba alle 12
+    expect(free(30), containsAll([at(11), at(12)]));
+    expect(free(50), contains(at(12)));
+    expect(free(30), isNot(contains(at(10))));
+    // un altro colore: il barbiere deve essere libero solo 30 minuti,
+    // ma le 3 ore devono stare nell'orario (si chiude alle 20:00)
+    final c2 = free(180, busyMin: 30);
+    expect(c2, contains(at(11)));
+    expect(c2, contains(at(17)));
+    expect(c2, isNot(contains(at(17, 30))));
+    // senza posa nulla cambia
+    final normal = Appointment(id: 'n', barberId: 'b1', serviceName: 'Taglio', price: 15, start: at(10), end: at(11));
+    expect(normal.busyEnd, at(11));
+    expect(Service(name: 'Colore', durationMin: 180, price: 40, busyMin: 30).busyDuration, 30);
+    expect(Service(name: 'Taglio', durationMin: 30, price: 15).busyDuration, 30);
+  });
+
   test('candidateSlots: tutti gli orari della fascia, anche quelli gia\' presi', () {
     final b = Barber(id: 'b1', name: 'Antonio', hours: [WorkingHours(weekday: 2, start: 540, end: 600)]);
     final day = DateTime(2026, 10, 20);

@@ -86,7 +86,9 @@ class _ServicesTabState extends State<ServicesTab> {
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text(s.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15.5)),
                           Text(
-                            '${fmtDuration(s.durationMin)}${s.active ? '' : ' · non visibile ai clienti'}',
+                            '${fmtDuration(s.durationMin)}'
+                            '${s.hasPosa ? ' · occupato i primi ${fmtDuration(s.busyMin!)}' : ''}'
+                            '${s.active ? '' : ' · non visibile ai clienti'}',
                             style: const TextStyle(color: AppColors.muted, fontSize: 12.5),
                           ),
                         ]),
@@ -128,9 +130,13 @@ class _ServiceDialogState extends State<_ServiceDialog> {
       text: widget.service == null ? '' : widget.service!.price.toStringAsFixed(2).replaceAll('.', ','));
   late bool _active = widget.service?.active ?? true;
 
+  /// Tempo di posa (es. colore): il barbiere e' occupato solo per il tempo iniziale.
+  late bool _posa = widget.service?.hasPosa ?? false;
+  late final _busy = TextEditingController(text: '${widget.service?.busyMin ?? 30}');
+
   @override
   void dispose() {
-    for (final c in [_name, _desc, _duration, _price]) {
+    for (final c in [_name, _desc, _duration, _price, _busy]) {
       c.dispose();
     }
     super.dispose();
@@ -149,6 +155,7 @@ class _ServiceDialogState extends State<_ServiceDialog> {
           price: double.parse(_price.text.replaceAll(',', '.')),
           active: _active,
           sortOrder: widget.service?.sortOrder ?? widget.nextOrder,
+          busyMin: _posa ? int.parse(_busy.text) : null,
         ),
       ),
     );
@@ -191,7 +198,7 @@ class _ServiceDialogState extends State<_ServiceDialog> {
                       controller: _duration,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      decoration: const InputDecoration(labelText: 'Durata', suffixText: 'min'),
+                      decoration: InputDecoration(labelText: _posa ? 'Tempo totale' : 'Durata', suffixText: 'min'),
                       validator: (v) {
                         final n = int.tryParse(v ?? '');
                         return n == null || n < 5 || n > 480 ? '5–480' : null;
@@ -210,6 +217,31 @@ class _ServiceDialogState extends State<_ServiceDialog> {
                   ),
                 ]),
                 const SizedBox(height: 8),
+                SwitchListTile(
+                  value: _posa,
+                  onChanged: (v) => setState(() => _posa = v),
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Ha un tempo di posa'),
+                  subtitle: const Text('Es. colore: dopo il tempo iniziale il barbiere è libero per altri clienti'),
+                ),
+                if (_posa)
+                  TextFormField(
+                    controller: _busy,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(
+                      labelText: 'Tempo iniziale (barbiere occupato)',
+                      suffixText: 'min',
+                      helperText: 'Il cliente vede solo il tempo totale',
+                    ),
+                    validator: (v) {
+                      final n = int.tryParse(v ?? '');
+                      final total = int.tryParse(_duration.text) ?? 0;
+                      if (n == null || n < 5) return 'Almeno 5 minuti';
+                      if (n >= total) return 'Deve essere minore del tempo totale';
+                      return null;
+                    },
+                  ),
                 SwitchListTile(
                   value: _active,
                   onChanged: (v) => setState(() => _active = v),
