@@ -236,133 +236,164 @@ class _SettingsTabState extends State<SettingsTab> {
       ),
     );
 
-    return FitBody(
-      maxWidth: 800,
-      alignment: Alignment.topCenter,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 12),
-          tile(
-            Icons.storefront_outlined,
-            'Il locale',
-            '${_s.name} · ${_s.address}',
-            onTap: () => _editSection('Il locale', [
-              _field('name', 'Nome', icon: Icons.storefront_outlined),
-              _field('tagline', 'Sottotitolo', icon: Icons.short_text),
-              _field('address', 'Indirizzo', icon: Icons.location_on_outlined),
-              _field('maps', 'Link Google Maps', icon: Icons.map_outlined, type: TextInputType.url),
-              _field('phone', 'Telefono', icon: Icons.call_outlined, type: TextInputType.phone),
-              _field('whatsapp', 'WhatsApp del negozio', icon: Icons.chat_outlined, type: TextInputType.phone),
-              _field('instagram', 'Instagram (mostrato nella home)', icon: Icons.camera_alt_outlined, hint: 'nomeutente'),
-              _field(
-                'review',
-                'Link recensioni Google',
-                icon: Icons.star_outline,
-                type: TextInputType.url,
-                hint: 'https://g.page/r/…/review',
-              ),
-            ]),
-          ),
-          tile(
-            Icons.event_note_outlined,
-            'Prenotazioni',
-            'Orari ogni ${_s.slotStepMin} min · prenotabile fino a ${_s.bookingDaysAhead} giorni · '
-                'annullabile fino a ${_s.minCancelHours} ore prima',
-            onTap: () => _editSection('Prenotazioni', [
-              Row(children: [_number('step', 'Intervallo tra gli orari', 'min', 5, 120)]),
-              const SizedBox(height: 12),
-              Row(children: [_number('days', 'Prenotabile fino a', 'giorni', 1, 365)]),
-              const SizedBox(height: 12),
-              Row(children: [_number('cancel', 'Annullabile fino a', 'ore prima', 0, 72)]),
-            ]),
-          ),
-          tile(
-            Icons.notifications_active_outlined,
-            'Notifiche',
-            () {
-              final n = NotifSettings.fromJson(state.settings.notifications);
-              final on = notifTypes.where((t) => n.enabled(t.kind)).length;
-              return '$on di ${notifTypes.length} attive · testi e orari modificabili';
-            }(),
-            onTap: () async {
-              await Navigator.of(context).push(fadeRoute(const NotificationsScreen()));
-              if (mounted) setState(() => _s = AppScope.read(context).settings.copy());
-            },
-          ),
-          tile(
-            Icons.star_outline,
-            'Valutazioni dei clienti',
-            'Voti dopo il taglio e commenti privati',
-            onTap: () => Navigator.of(context).push(fadeRoute(const ReviewsScreen())),
-          ),
-          tile(
-            Icons.chat_outlined,
-            'Promemoria WhatsApp',
-            '24 ore e 1 ora prima di ogni appuntamento',
-            trailing: Switch(
-              value: _s.remindersEnabled,
-              onChanged: _saving
-                  ? null
-                  : (v) {
-                      setState(() => _s.remindersEnabled = v);
-                      _save();
-                    },
-            ),
-          ),
-          tile(
-            Icons.door_front_door_outlined,
-            'Chiusure e orari speciali',
-            nextDay == null
-                ? 'Ferie, festività e giorni con orario diverso'
-                : 'Prossimo: ${fmtDayShort(nextDay.day)} · '
-                      '${nextDay.closed ? 'chiuso' : '${formatTime(nextDay.open!)}–${formatTime(nextDay.close!)}'}',
-            onTap: () => Navigator.of(context).push(fadeRoute(const ShopDaysScreen())),
-          ),
-          tile(
-            Icons.file_download_outlined,
-            'Esporta dati',
-            'Clienti e incassi in un file per Excel (anche per il commercialista)',
-            onTap: () => showExportSheet(context),
-          ),
-          SectionTitle(
-            'Amministratori',
-            trailing: TextButton.icon(
-              onPressed: _addAdmin,
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Aggiungi'),
-            ),
-          ),
-          for (final e in _admins)
-            GlassCard(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
-              child: Row(
-                children: [
-                  const Icon(Icons.admin_panel_settings_outlined, color: AppColors.muted),
-                  const SizedBox(width: 12),
-                  Expanded(child: Text(e, overflow: TextOverflow.ellipsis)),
-                  if (e != myEmail)
-                    IconButton(onPressed: () => _removeAdmin(e), icon: const Icon(Icons.close))
-                  else
-                    const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Text('tu', style: TextStyle(color: AppColors.muted)),
-                    ),
-                ],
-              ),
-            ),
-          if (state.backend.isDemo) ...[
-            const SizedBox(height: 16),
-            const Text(
-              'Modalità demo: i dati sono locali e si azzerano alla chiusura dell\'app.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.warning, fontSize: 12.5),
+    // voci a grandezza normale, raggruppate; su tablet e computer in due colonne
+    Widget group(String title, List<Widget> tiles) => LayoutBuilder(
+      builder: (context, c) {
+        final two = c.maxWidth >= 700;
+        final w = two ? (c.maxWidth - 12) / 2 : c.maxWidth;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SectionTitle(title),
+            Wrap(
+              spacing: 12,
+              children: [for (final t in tiles) SizedBox(width: w, child: t)],
             ),
           ],
-        ],
-      ),
+        );
+      },
+    );
+
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 32),
+      children: [
+        ResponsiveCenter(
+          maxWidth: 900,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              group('Negozio', [
+                tile(
+                  Icons.storefront_outlined,
+                  'Il locale',
+                  '${_s.name} · ${_s.address}',
+                  onTap: () => _editSection('Il locale', [
+                    _field('name', 'Nome', icon: Icons.storefront_outlined),
+                    _field('tagline', 'Sottotitolo', icon: Icons.short_text),
+                    _field('address', 'Indirizzo', icon: Icons.location_on_outlined),
+                    _field('maps', 'Link Google Maps', icon: Icons.map_outlined, type: TextInputType.url),
+                    _field('phone', 'Telefono', icon: Icons.call_outlined, type: TextInputType.phone),
+                    _field('whatsapp', 'WhatsApp del negozio', icon: Icons.chat_outlined, type: TextInputType.phone),
+                    _field(
+                      'instagram',
+                      'Instagram (mostrato nella home)',
+                      icon: Icons.camera_alt_outlined,
+                      hint: 'nomeutente',
+                    ),
+                    _field(
+                      'review',
+                      'Link recensioni Google',
+                      icon: Icons.star_outline,
+                      type: TextInputType.url,
+                      hint: 'https://g.page/r/…/review',
+                    ),
+                  ]),
+                ),
+                tile(
+                  Icons.event_note_outlined,
+                  'Prenotazioni',
+                  'Orari ogni ${_s.slotStepMin} min · prenotabile fino a ${_s.bookingDaysAhead} giorni · '
+                      'annullabile fino a ${_s.minCancelHours} ore prima',
+                  onTap: () => _editSection('Prenotazioni', [
+                    Row(children: [_number('step', 'Intervallo tra gli orari', 'min', 5, 120)]),
+                    const SizedBox(height: 12),
+                    Row(children: [_number('days', 'Prenotabile fino a', 'giorni', 1, 365)]),
+                    const SizedBox(height: 12),
+                    Row(children: [_number('cancel', 'Annullabile fino a', 'ore prima', 0, 72)]),
+                  ]),
+                ),
+                tile(
+                  Icons.door_front_door_outlined,
+                  'Chiusure e orari speciali',
+                  nextDay == null
+                      ? 'Ferie, festività e giorni con orario diverso'
+                      : 'Prossimo: ${fmtDayShort(nextDay.day)} · '
+                            '${nextDay.closed ? 'chiuso' : '${formatTime(nextDay.open!)}–${formatTime(nextDay.close!)}'}',
+                  onTap: () => Navigator.of(context).push(fadeRoute(const ShopDaysScreen())),
+                ),
+              ]),
+              group('Clienti', [
+                tile(
+                  Icons.notifications_active_outlined,
+                  'Notifiche',
+                  () {
+                    final n = NotifSettings.fromJson(state.settings.notifications);
+                    final on = notifTypes.where((t) => n.enabled(t.kind)).length;
+                    return '$on di ${notifTypes.length} attive · testi e orari modificabili';
+                  }(),
+                  onTap: () async {
+                    await Navigator.of(context).push(fadeRoute(const NotificationsScreen()));
+                    if (mounted) setState(() => _s = AppScope.read(context).settings.copy());
+                  },
+                ),
+                tile(
+                  Icons.chat_outlined,
+                  'Promemoria WhatsApp',
+                  '24 ore e 1 ora prima di ogni appuntamento',
+                  trailing: Switch(
+                    value: _s.remindersEnabled,
+                    onChanged: _saving
+                        ? null
+                        : (v) {
+                            setState(() => _s.remindersEnabled = v);
+                            _save();
+                          },
+                  ),
+                ),
+                tile(
+                  Icons.star_outline,
+                  'Valutazioni dei clienti',
+                  'Voti dopo il taglio e commenti privati',
+                  onTap: () => Navigator.of(context).push(fadeRoute(const ReviewsScreen())),
+                ),
+              ]),
+              group('Strumenti', [
+                tile(
+                  Icons.file_download_outlined,
+                  'Esporta dati',
+                  'Clienti e incassi in un file per Excel (anche per il commercialista)',
+                  onTap: () => showExportSheet(context),
+                ),
+              ]),
+              SectionTitle(
+                'Amministratori',
+                trailing: TextButton.icon(
+                  onPressed: _addAdmin,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Aggiungi'),
+                ),
+              ),
+              for (final e in _admins)
+                GlassCard(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.admin_panel_settings_outlined, color: AppColors.muted),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(e, overflow: TextOverflow.ellipsis)),
+                      if (e != myEmail)
+                        IconButton(onPressed: () => _removeAdmin(e), icon: const Icon(Icons.close))
+                      else
+                        const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Text('tu', style: TextStyle(color: AppColors.muted)),
+                        ),
+                    ],
+                  ),
+                ),
+              if (state.backend.isDemo) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  'Modalità demo: i dati sono locali e si azzerano alla chiusura dell\'app.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.warning, fontSize: 12.5),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
