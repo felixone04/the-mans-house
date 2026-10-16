@@ -126,6 +126,15 @@ abstract class Backend {
   Future<void> rescheduleAppointment(String id, {required String barberId, required DateTime start});
   Future<List<Appointment>> myAppointments();
 
+  /// Il cliente conferma che ci sara' (conferma presenza del giorno prima).
+  Future<void> confirmAttendance(String appointmentId);
+
+  /// Voto dopo il taglio (1-5) con commento facoltativo, visibile solo al negozio.
+  Future<void> submitReview(String appointmentId, int stars, {String comment = ''});
+
+  /// Solo area riservata: appuntamenti con un voto, dal piu' recente.
+  Future<List<Appointment>> fetchReviews();
+
   // --- Lista d'attesa ---
   /// Mette il cliente in lista per un orario occupato ([barberId] null =
   /// primo disponibile). Se si libera, il posto gli viene assegnato da solo.

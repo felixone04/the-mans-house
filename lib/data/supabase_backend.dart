@@ -389,6 +389,27 @@ class SupabaseBackend implements Backend {
     return rows.map(Appointment.fromJson).toList();
   });
 
+  @override
+  Future<void> confirmAttendance(String appointmentId) => _guard(() async {
+    await _db.rpc('confirm_attendance', params: {'p_id': appointmentId});
+  });
+
+  @override
+  Future<void> submitReview(String appointmentId, int stars, {String comment = ''}) => _guard(() async {
+    await _db.rpc('submit_review', params: {'p_id': appointmentId, 'p_stars': stars, 'p_comment': comment});
+  });
+
+  @override
+  Future<List<Appointment>> fetchReviews() => _guard(() async {
+    final rows = await _db
+        .from('appointments')
+        .select('*, barbers(name)')
+        .not('review_stars', 'is', null)
+        .order('reviewed_at', ascending: false)
+        .limit(200);
+    return rows.map(Appointment.fromJson).toList();
+  });
+
   // --- Lista d'attesa ---
 
   @override

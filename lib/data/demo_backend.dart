@@ -722,6 +722,43 @@ class DemoBackend implements Backend {
     _promoteWaitlist(); // il vecchio orario si e' liberato
   }
 
+  @override
+  Future<void> confirmAttendance(String appointmentId) => _delay(() {
+    final me = _current;
+    final a = _appointments.where((a) => a.id == appointmentId).firstOrNull;
+    if (me == null || a == null || (!me.isAdmin && a.userId != me.id)) {
+      throw AppException('Operazione non consentita');
+    }
+    if (a.status != AppointmentStatus.confirmed) throw AppException('Appuntamento gia\' chiuso o annullato');
+    a.attendanceConfirmedAt = DateTime.now();
+  });
+
+  final _reviewedAt = <String, DateTime>{};
+
+  @override
+  Future<void> submitReview(String appointmentId, int stars, {String comment = ''}) => _delay(() {
+    final me = _current;
+    final a = _appointments.where((a) => a.id == appointmentId).firstOrNull;
+    if (me == null || a == null || a.userId != me.id) throw AppException('Operazione non consentita');
+    if (stars < 1 || stars > 5) throw AppException('Voto non valido');
+    // come submit_review: solo dopo l'appuntamento, una volta sola
+    if (a.status == AppointmentStatus.cancelled || a.start.isAfter(DateTime.now())) {
+      throw AppException('Potrai lasciare un voto dopo l\'appuntamento');
+    }
+    if (a.reviewStars != null) throw AppException('Hai gia\' lasciato un voto');
+    a
+      ..reviewStars = stars
+      ..reviewComment = comment.trim();
+    _reviewedAt[a.id] = DateTime.now();
+  });
+
+  @override
+  Future<List<Appointment>> fetchReviews() => _delay(() {
+    _admin();
+    return _appointments.where((a) => a.reviewStars != null).toList()
+      ..sort((x, y) => (_reviewedAt[y.id] ?? y.start).compareTo(_reviewedAt[x.id] ?? x.start));
+  });
+
   // --- Lista d'attesa ---
 
   final _waitlist = <WaitlistEntry>[];

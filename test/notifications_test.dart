@@ -30,6 +30,50 @@ void main() {
     expect(back.enabled(NotifKind.review), isTrue);
   });
 
+  test('conferma presenza: dal giorno prima all\'ora scelta, finche\' non risponde', () {
+    final n = NotifSettings();
+    final a = Appointment(
+      id: 'a',
+      barberId: 'b',
+      serviceName: 'Taglio',
+      price: 15,
+      start: DateTime(2026, 10, 17, 10, 30),
+      end: DateTime(2026, 10, 17, 11),
+    );
+    expect(needsAttendance(a, n, DateTime(2026, 10, 16, 17, 59)), isFalse);
+    expect(needsAttendance(a, n, DateTime(2026, 10, 16, 18)), isTrue);
+    expect(needsAttendance(a, n, DateTime(2026, 10, 17, 9)), isTrue);
+    expect(needsAttendance(a, n, DateTime(2026, 10, 17, 10, 31)), isFalse); // gia' iniziato
+    a.attendanceConfirmedAt = DateTime(2026, 10, 16, 19);
+    expect(needsAttendance(a, n, DateTime(2026, 10, 16, 20)), isFalse);
+    // spenta dall'area riservata
+    a.attendanceConfirmedAt = null;
+    n.prefs['attendanceCheck'] = NotifPref(enabled: false);
+    expect(needsAttendance(a, n, DateTime(2026, 10, 16, 20)), isFalse);
+  });
+
+  test('voto: un\'ora dopo la fine, per 7 giorni, una volta sola', () {
+    final n = NotifSettings();
+    final a = Appointment(
+      id: 'a',
+      barberId: 'b',
+      serviceName: 'Taglio',
+      price: 15,
+      start: DateTime(2026, 10, 17, 10, 30),
+      end: DateTime(2026, 10, 17, 11),
+      status: AppointmentStatus.completed,
+    );
+    expect(needsReview(a, n, DateTime(2026, 10, 17, 11, 30)), isFalse);
+    expect(needsReview(a, n, DateTime(2026, 10, 17, 12)), isTrue);
+    expect(needsReview(a, n, DateTime(2026, 10, 25)), isFalse);
+    a.reviewStars = 5;
+    expect(needsReview(a, n, DateTime(2026, 10, 17, 12)), isFalse);
+    a
+      ..reviewStars = null
+      ..status = AppointmentStatus.noShow;
+    expect(needsReview(a, n, DateTime(2026, 10, 17, 12)), isFalse);
+  });
+
   test('ogni tipo ha testi e un segnaposto valido', () {
     expect(notifTypes.map((t) => t.kind).toSet().length, NotifKind.values.length);
     for (final t in notifTypes) {

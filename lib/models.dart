@@ -515,6 +515,13 @@ class Appointment {
   /// Servizi con posa: minuti in cui il barbiere e' occupato (null = tutto).
   int? busyMin;
 
+  /// Il cliente ha confermato che ci sara' (conferma presenza del giorno prima).
+  DateTime? attendanceConfirmedAt;
+
+  /// Voto lasciato dopo il taglio (1-5) e commento privato.
+  int? reviewStars;
+  String reviewComment;
+
   /// Fine del lavoro del barbiere: dopo e' libero anche se il cliente e' in posa.
   DateTime get busyEnd {
     final b = busyMin;
@@ -544,6 +551,9 @@ class Appointment {
     this.productsTotal = 0,
     this.extra = false,
     this.busyMin,
+    this.attendanceConfirmedAt,
+    this.reviewStars,
+    this.reviewComment = '',
   });
 
   factory Appointment.fromJson(Map<String, dynamic> j) => Appointment(
@@ -568,6 +578,9 @@ class Appointment {
     productsTotal: _num(j['products_total']),
     extra: j['overbooked'] ?? false,
     busyMin: (j['busy_min'] as num?)?.toInt(),
+    attendanceConfirmedAt: j['attendance_confirmed_at'] == null ? null : _dt(j['attendance_confirmed_at']),
+    reviewStars: (j['review_stars'] as num?)?.toInt(),
+    reviewComment: j['review_comment'] ?? '',
   );
 
   bool get isUpcoming => status == AppointmentStatus.confirmed && start.isAfter(DateTime.now());

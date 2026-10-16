@@ -9,6 +9,7 @@ import '../../widgets/common.dart';
 import '../../notifications.dart';
 import 'export_sheet.dart';
 import 'notifications_screen.dart';
+import 'reviews_screen.dart';
 import 'shop_days_screen.dart';
 
 /// Informazioni del locale, regole di prenotazione, promemoria e amministratori.
@@ -289,6 +290,12 @@ class _SettingsTabState extends State<SettingsTab> {
               await Navigator.of(context).push(fadeRoute(const NotificationsScreen()));
               if (mounted) setState(() => _s = AppScope.read(context).settings.copy());
             },
+          ),
+          tile(
+            Icons.star_outline,
+            'Valutazioni dei clienti',
+            'Voti dopo il taglio e commenti privati',
+            onTap: () => Navigator.of(context).push(fadeRoute(const ReviewsScreen())),
           ),
           tile(
             Icons.chat_outlined,

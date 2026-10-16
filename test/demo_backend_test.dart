@@ -387,6 +387,34 @@ void main() {
     expect((await saved()).total, service.price);
   });
 
+  test('conferma presenza e voto: solo il cliente, voto dopo l\'appuntamento e una volta', () async {
+    await signUp('voto@test.it');
+    final barber = (await backend.fetchBarbers()).first;
+    final service = (await backend.fetchServices()).first;
+    final start = await freeSlot(barber, service, DateTime.now().add(const Duration(hours: 4)));
+    final a = await backend.book(barberId: barber.id, serviceId: service.id, start: start);
+
+    await backend.confirmAttendance(a.id);
+    expect((await backend.myAppointments()).firstWhere((x) => x.id == a.id).attendanceConfirmedAt, isNotNull);
+    // prima dell'appuntamento non si vota
+    await expectLater(() => backend.submitReview(a.id, 5), throwsA(isA<AppException>()));
+
+    // dopo il taglio (data spostata nel passato per la prova)
+    final mine = (await backend.myAppointments()).firstWhere((x) => x.id == a.id)
+      ..start = DateTime.now().subtract(const Duration(hours: 3))
+      ..end = DateTime.now().subtract(const Duration(hours: 2))
+      ..status = AppointmentStatus.completed;
+    await backend.submitReview(mine.id, 2, comment: 'Attesa lunga');
+    await expectLater(() => backend.submitReview(mine.id, 5), throwsA(isA<AppException>()));
+    await expectLater(() => backend.fetchReviews(), throwsA(isA<AppException>())); // solo admin
+
+    await backend.signOut();
+    await backend.signInWithEmail(DemoBackend.adminEmail, DemoBackend.adminPassword);
+    final reviews = await backend.fetchReviews();
+    expect(reviews.first.reviewStars, 2);
+    expect(reviews.first.reviewComment, 'Attesa lunga');
+  });
+
   test('colore con posa: durante la posa il barbiere prende altri clienti', () async {
     await signUp('colore@test.it');
     final barber = (await backend.fetchBarbers()).first;

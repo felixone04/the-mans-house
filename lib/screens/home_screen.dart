@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/slots.dart';
 import '../models.dart';
+import '../notifications.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -10,6 +11,7 @@ import 'admin/admin_screen.dart';
 import 'auth_screen.dart';
 import 'booking_screen.dart';
 import 'products_screen.dart';
+import 'review_sheet.dart';
 
 /// Home: schermata unica, senza scorrimento. In alto lo stato del negozio e
 /// l'account, al centro l'insegna, sotto Prenota ora, il prossimo
@@ -41,11 +43,16 @@ class HomeScreen extends StatelessWidget {
           maxWidth: 560,
           child: Column(
             children: [
+              // dopo il taglio chiede il voto (una volta sola per appuntamento)
+              const ReviewPrompter(),
               const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
-                    child: Align(alignment: Alignment.centerLeft, child: _StatusPill(barbers: state.barbers)),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: _StatusPill(barbers: state.barbers),
+                    ),
                   ),
                   if (state.isAdmin)
                     IconButton(
@@ -65,14 +72,24 @@ class HomeScreen extends StatelessWidget {
                     return Center(
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
-                        child: SizedBox(width: c.maxWidth, child: AppLogo(height: logoH)),
+                        child: SizedBox(
+                          width: c.maxWidth,
+                          child: AppLogo(height: logoH),
+                        ),
                       ),
                     );
                   },
                 ),
               ),
               _BookButton(onTap: () => Navigator.of(context).push(fadeRoute(const BookingScreen()))),
-              if (next != null) ...[const SizedBox(height: 12), _NextAppointmentCard(appointment: next)],
+              if (next != null) ...[
+                const SizedBox(height: 12),
+                _NextAppointmentCard(
+                  appointment: next,
+                  // il giorno prima: «Ci sei domani?» con Ci sono / Annulla
+                  askAttendance: needsAttendance(next, NotifSettings.fromJson(s.notifications), DateTime.now()),
+                ),
+              ],
               const SizedBox(height: 12),
               _QuickActions(settings: s, barbers: state.barbers),
               const SizedBox(height: 12),
@@ -388,12 +405,47 @@ class _QuickActions extends StatelessWidget {
 /// "Il tuo prossimo appuntamento": data in nero a sinistra, servizio e ora,
 /// barbiere e stato.
 class _NextAppointmentCard extends StatelessWidget {
-  const _NextAppointmentCard({required this.appointment});
+  const _NextAppointmentCard({required this.appointment, this.askAttendance = false});
   final Appointment appointment;
+  final bool askAttendance;
+
+  Future<void> _confirm(BuildContext context) async {
+    final state = AppScope.read(context);
+    try {
+      await state.backend.confirmAttendance(appointment.id);
+      await state.refreshAppointments();
+      if (context.mounted) showMessage(context, 'Grazie, ti aspettiamo alle ${fmtTime(appointment.start)}');
+    } catch (e) {
+      if (context.mounted) showError(context, e);
+    }
+  }
+
+  Future<void> _cancel(BuildContext context) async {
+    final a = appointment;
+    final ok = await confirmDialog(
+      context,
+      title: 'Annullare l\'appuntamento?',
+      message:
+          '${a.serviceName}\n${fmtDayLong(a.start)} alle ${fmtTime(a.start)}\n\n'
+          'Il posto passa a chi è in lista d\'attesa.',
+      confirm: 'Annulla appuntamento',
+      destructive: true,
+    );
+    if (!ok || !context.mounted) return;
+    final state = AppScope.read(context);
+    try {
+      await state.backend.cancelAppointment(a.id);
+      await state.refreshAppointments();
+      if (context.mounted) showMessage(context, 'Appuntamento annullato');
+    } catch (e) {
+      if (context.mounted) showError(context, e);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final a = appointment;
+    final tomorrow = dayOnly(a.start) == dayOnly(DateTime.now()).add(const Duration(days: 1));
     return Material(
       color: Colors.white.withValues(alpha: 0.7),
       shape: RoundedRectangleBorder(
@@ -405,74 +457,121 @@ class _NextAppointmentCard extends StatelessWidget {
         onTap: () => Navigator.of(context).push(fadeRoute(const AccountScreen())),
         child: Padding(
           padding: const EdgeInsets.all(10),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                width: 54,
-                padding: const EdgeInsets.symmetric(vertical: 7),
-                decoration: BoxDecoration(color: AppColors.quiet, borderRadius: BorderRadius.circular(12)),
-                child: Column(
-                  children: [
-                    Text(
-                      fmtDayShort(a.start).split(' ').first.toUpperCase(),
-                      style: const TextStyle(
-                        color: AppColors.quietText,
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.6,
-                      ),
-                    ),
-                    Text(
-                      '${a.start.day}',
-                      style: slab(size: 22, color: AppColors.quietText, weight: FontWeight.w700, spacing: 0),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'IL TUO PROSSIMO APPUNTAMENTO',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: AppColors.muted, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '${a.serviceName} · ${fmtTime(a.start)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15.5),
-                    ),
-                    Row(
+              Row(
+                children: [
+                  Container(
+                    width: 54,
+                    padding: const EdgeInsets.symmetric(vertical: 7),
+                    decoration: BoxDecoration(color: AppColors.quiet, borderRadius: BorderRadius.circular(12)),
+                    child: Column(
                       children: [
-                        Expanded(
-                          child: Text(
-                            a.barberName.isEmpty ? '' : 'con ${a.barberName}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: AppColors.silver, fontSize: 13),
+                        Text(
+                          fmtDayShort(a.start).split(' ').first.toUpperCase(),
+                          style: const TextStyle(
+                            color: AppColors.quietText,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.6,
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFDDF1E3),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Text(
-                            'Confermato',
-                            style: TextStyle(color: AppColors.success, fontSize: 11.5, fontWeight: FontWeight.w800),
-                          ),
+                        Text(
+                          '${a.start.day}',
+                          style: slab(size: 22, color: AppColors.quietText, weight: FontWeight.w700, spacing: 0),
                         ),
                       ],
                     ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'IL TUO PROSSIMO APPUNTAMENTO',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${a.serviceName} · ${fmtTime(a.start)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15.5),
+                        ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                a.barberName.isEmpty ? '' : 'con ${a.barberName}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: AppColors.silver, fontSize: 13),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: askAttendance ? const Color(0xFFFFF1DB) : const Color(0xFFDDF1E3),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                askAttendance ? 'Da confermare' : 'Confermato',
+                                style: TextStyle(
+                                  color: askAttendance ? const Color(0xFF8A4B00) : AppColors.success,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              // conferma presenza: il posto di chi annulla va a chi e' in lista d'attesa
+              if (askAttendance) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Ci sei ${tomorrow ? 'domani' : 'oggi'} alle ${fmtTime(a.start)}?',
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                      ),
+                    ),
+                    FilledButton(
+                      onPressed: () => _confirm(context),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.quiet,
+                        foregroundColor: AppColors.quietText,
+                        minimumSize: const Size(0, 36),
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                      ),
+                      child: const Text('Ci sono'),
+                    ),
+                    const SizedBox(width: 6),
+                    OutlinedButton(
+                      onPressed: () => _cancel(context),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 36),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                      ),
+                      child: const Text('Annulla'),
+                    ),
                   ],
                 ),
-              ),
+              ],
             ],
           ),
         ),

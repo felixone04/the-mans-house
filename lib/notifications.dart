@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'models.dart';
+import 'widgets/common.dart';
+
 /// Tipi di notifica. Ognuno si attiva, si disattiva e si modifica dall'area
 /// riservata (Opzioni -> Notifiche); i testi usano segnaposto come {ora}.
 enum NotifKind {
@@ -329,6 +332,41 @@ class NotifSettings {
       : null;
 
   NotifSettings copy() => NotifSettings.fromJson(toJson());
+}
+
+/// Valori dei segnaposto per un appuntamento del cliente.
+Map<String, String> notifValues(Appointment a, ShopSettings s, {String clientName = ''}) => {
+  'nome': clientName.trim().split(RegExp(r'\s+')).first,
+  'cliente': a.customerName,
+  'servizio': a.serviceName,
+  'giorno': fmtDayShort(a.start).toLowerCase(),
+  'ora': fmtTime(a.start),
+  'barbiere': a.barberName,
+  'indirizzo': s.address,
+  'negozio': s.name,
+};
+
+/// Da quando si chiede la conferma presenza: il giorno prima, all'ora scelta.
+DateTime attendanceAskFrom(Appointment a, NotifSettings n) {
+  final m = n.offset(NotifKind.attendanceCheck);
+  return DateTime(a.start.year, a.start.month, a.start.day - 1, 0, m);
+}
+
+/// L'appuntamento aspetta la conferma presenza del cliente adesso?
+bool needsAttendance(Appointment a, NotifSettings n, DateTime now) =>
+    n.enabled(NotifKind.attendanceCheck) &&
+    a.status == AppointmentStatus.confirmed &&
+    a.attendanceConfirmedAt == null &&
+    a.start.isAfter(now) &&
+    !now.isBefore(attendanceAskFrom(a, n));
+
+/// Appuntamento da votare: finito da almeno il tempo scelto, negli ultimi 7
+/// giorni, non ancora votato e non annullato o saltato.
+bool needsReview(Appointment a, NotifSettings n, DateTime now) {
+  if (!n.enabled(NotifKind.review) || a.reviewStars != null) return false;
+  if (a.status == AppointmentStatus.cancelled || a.status == AppointmentStatus.noShow) return false;
+  final from = a.end.add(Duration(minutes: n.offset(NotifKind.review)));
+  return !now.isBefore(from) && now.difference(a.end) < const Duration(days: 7);
 }
 
 /// Notifica in stile essenziale: icona tonda nel colore del tipo, nome

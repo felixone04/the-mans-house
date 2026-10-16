@@ -568,6 +568,32 @@ class _VisitCard extends StatelessWidget {
                           style: const TextStyle(color: AgendaLight.sub, fontSize: 13.5, fontWeight: FontWeight.w500),
                         ),
                       ),
+                      // il cliente ha risposto «Ci sono» alla conferma presenza
+                      if (waiting && a.attendanceConfirmedAt != null)
+                        Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDDF1E3),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.check, size: 12, color: Color(0xFF145C35)),
+                              SizedBox(width: 3),
+                              Text(
+                                'CI SARÀ',
+                                style: TextStyle(
+                                  color: Color(0xFF145C35),
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       // accettato dalla lista d'attesa anche se l'orario era pieno
                       if (a.extra)
                         Container(
