@@ -17,10 +17,99 @@ class AccountScreen extends StatefulWidget {
 }
 
 class _AccountScreenState extends State<AccountScreen> {
+  /// Richieste in lista d'attesa (in attesa o con il posto gia' assegnato).
+  List<WaitlistEntry> _waitlist = [];
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => AppScope.read(context).refreshAppointments());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppScope.read(context).refreshAppointments();
+      _loadWaitlist();
+    });
+  }
+
+  Future<void> _loadWaitlist() async {
+    try {
+      final list = await AppScope.read(context).backend.myWaitlist();
+      if (mounted) {
+        setState(() => _waitlist = list.where((w) => w.start.isAfter(DateTime.now())).toList());
+      }
+    } catch (_) {
+      // la lista d'attesa e' un di piu': se non si carica la pagina resta usabile
+    }
+  }
+
+  Future<void> _leaveWaitlist(WaitlistEntry w) async {
+    final ok = await confirmDialog(
+      context,
+      title: 'Uscire dalla lista d\'attesa?',
+      message: '${w.serviceName}\n${fmtDayLong(w.start)} alle ${fmtTime(w.start)}',
+      confirm: 'Esci dalla lista',
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
+    try {
+      await AppScope.read(context).backend.leaveWaitlist(w.id);
+      await _loadWaitlist();
+      if (mounted) showMessage(context, 'Sei uscito dalla lista d\'attesa');
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
+  Widget _waitTile(WaitlistEntry w) {
+    final waiting = w.status == WaitlistStatus.waiting;
+    return GlassCard(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: waiting ? const Color(0xFFFFF1DB) : const Color(0xFFDDF1E3),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              waiting ? Icons.hourglass_bottom : Icons.check,
+              color: waiting ? const Color(0xFF8A4B00) : AppColors.success,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${capitalize(fmtDayShort(w.start))} · ${fmtTime(w.start)} · ${w.serviceName}',
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5),
+                ),
+                Text(
+                  waiting
+                      ? '${w.position == null ? 'In lista d\'attesa' : 'Sei il ${w.position}° in lista'}'
+                            ' · ${w.barberName.isEmpty ? 'primo disponibile' : 'con ${w.barberName}'}'
+                      : 'Posto assegnato: lo trovi nei prossimi appuntamenti',
+                  style: TextStyle(
+                    color: waiting ? const Color(0xFF8A4B00) : AppColors.success,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (waiting)
+            TextButton(
+              onPressed: () => _leaveWaitlist(w),
+              style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+              child: const Text('Esci'),
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _cancel(Appointment a) async {
@@ -213,6 +302,10 @@ class _AccountScreenState extends State<AccountScreen> {
                         ),
                       ),
                     for (final a in shown) tile(a),
+                    if (_waitlist.isNotEmpty) ...[
+                      const SectionTitle('Lista d\'attesa'),
+                      for (final w in _waitlist) _waitTile(w),
+                    ],
                   ],
                 ),
               ),

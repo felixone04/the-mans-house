@@ -126,6 +126,28 @@ abstract class Backend {
   Future<void> rescheduleAppointment(String id, {required String barberId, required DateTime start});
   Future<List<Appointment>> myAppointments();
 
+  // --- Lista d'attesa ---
+  /// Mette il cliente in lista per un orario occupato ([barberId] null =
+  /// primo disponibile). Se si libera, il posto gli viene assegnato da solo.
+  Future<WaitlistEntry> joinWaitlist({required String serviceId, String? barberId, required DateTime start});
+
+  /// Esce dalla lista (il cliente le sue richieste, l'admin tutte).
+  Future<void> leaveWaitlist(String id);
+
+  /// Richieste del cliente collegato, con la posizione in lista.
+  Future<List<WaitlistEntry>> myWaitlist();
+
+  /// Quante persone sono in lista per ogni orario: solo numeri, nessun nome.
+  Future<List<WaitlistCount>> waitlistCounts(DateTime from, DateTime to);
+
+  /// Solo area riservata: chi e' in lista (in attesa) tra [from] e [to].
+  Future<List<WaitlistEntry>> fetchWaitlist(DateTime from, DateTime to);
+
+  /// Solo area riservata: accetta comunque la richiesta anche se si e' pieni.
+  /// L'appuntamento va al barbiere scelto dal cliente o a uno a caso tra chi
+  /// lavora a quell'ora, segnato come extra.
+  Future<Appointment> acceptWaitlist(String id);
+
   // --- Area riservata ---
   Future<List<Appointment>> appointmentsBetween(DateTime from, DateTime to);
   Future<void> setAppointmentStatus(String id, AppointmentStatus status);

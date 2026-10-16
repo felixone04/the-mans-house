@@ -389,6 +389,63 @@ class SupabaseBackend implements Backend {
     return rows.map(Appointment.fromJson).toList();
   });
 
+  // --- Lista d'attesa ---
+
+  @override
+  Future<WaitlistEntry> joinWaitlist({required String serviceId, String? barberId, required DateTime start}) =>
+      _guard(() async {
+        final row = await _db.rpc(
+          'join_waitlist',
+          params: {'p_service': serviceId, 'p_barber': barberId, 'p_start': start.toUtc().toIso8601String()},
+        );
+        return WaitlistEntry.fromJson(Map<String, dynamic>.from(row as Map));
+      });
+
+  @override
+  Future<void> leaveWaitlist(String id) => _guard(() async {
+    await _db.rpc('leave_waitlist', params: {'p_id': id});
+  });
+
+  @override
+  Future<List<WaitlistEntry>> myWaitlist() => _guard(() async {
+    if (_db.auth.currentUser == null) return <WaitlistEntry>[];
+    final rows = await _db.rpc('my_waitlist') as List;
+    return rows.map((r) => WaitlistEntry.fromJson(Map<String, dynamic>.from(r as Map))).toList();
+  });
+
+  @override
+  Future<List<WaitlistCount>> waitlistCounts(DateTime from, DateTime to) => _guard(() async {
+    final rows =
+        await _db.rpc(
+              'waitlist_counts',
+              params: {'p_from': from.toUtc().toIso8601String(), 'p_to': to.toUtc().toIso8601String()},
+            )
+            as List;
+    return [
+      for (final r in rows.cast<Map>())
+        WaitlistCount(DateTime.parse(r['start_at']).toLocal(), r['barber_id'], (r['waiting'] as num).toInt()),
+    ];
+  });
+
+  @override
+  Future<List<WaitlistEntry>> fetchWaitlist(DateTime from, DateTime to) => _guard(() async {
+    final rows = await _db
+        .from('waitlist')
+        .select('*, barbers(name)')
+        .eq('status', 'waiting')
+        .gte('start_at', from.toUtc().toIso8601String())
+        .lt('start_at', to.toUtc().toIso8601String())
+        .order('start_at')
+        .order('created_at');
+    return rows.map(WaitlistEntry.fromJson).toList();
+  });
+
+  @override
+  Future<Appointment> acceptWaitlist(String id) => _guard(() async {
+    final row = await _db.rpc('accept_waitlist', params: {'p_id': id});
+    return Appointment.fromJson(Map<String, dynamic>.from(row as Map));
+  });
+
   // --- Area riservata ---
 
   @override

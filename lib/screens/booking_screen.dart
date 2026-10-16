@@ -58,6 +58,12 @@ class _BookingScreenState extends State<BookingScreen> {
 
   /// Tutti gli orari del giorno (anche occupati), per mostrarli barrati.
   Map<DateTime, List<DateTime>> _allSlots = {};
+
+  /// Persone in lista d'attesa per orario (senza nomi).
+  List<WaitlistCount> _waitCounts = const [];
+
+  /// La lista d'attesa e' per i clienti che prenotano un nuovo appuntamento.
+  bool get _canWait => !widget.adminMode && !_moving;
   bool _loadingSlots = false;
   bool _booking = false;
 
@@ -107,6 +113,12 @@ class _BookingScreenState extends State<BookingScreen> {
     try {
       final days = _days;
       _busy = await _state.backend.fetchBusy(days.first, days.last.add(const Duration(days: 1)));
+      // quanti sono in lista d'attesa per gli orari occupati (solo numeri)
+      try {
+        _waitCounts = await _state.backend.waitlistCounts(days.first, days.last.add(const Duration(days: 1)));
+      } catch (_) {
+        _waitCounts = const [];
+      }
       final moving = widget.reschedule;
       if (moving != null) {
         // l'appuntamento da spostare non occupa il suo stesso orario
@@ -166,6 +178,99 @@ class _BookingScreenState extends State<BookingScreen> {
           stepMin: step,
         ),
     };
+  }
+
+  /// Orario occupato: si puo' entrare in lista d'attesa. Il cliente vede solo
+  /// quante persone ci sono gia', mai chi.
+  Future<void> _waitlistSheet(DateTime slot) async {
+    final s = _service!;
+    final barberId = _anyBarber ? null : _barber?.id;
+    final already = waitingFor(_waitCounts, slot, barberId);
+    final join = await showModalBottomSheet<bool>(
+      context: context,
+      constraints: const BoxConstraints(maxWidth: 520),
+      builder: (c) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 4, 22, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Orario occupato', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 2),
+              Text(
+                '${capitalize(fmtDayLong(slot))} · ${fmtTime(slot)} · ${s.name}'
+                '${_anyBarber ? '' : ' · con ${_barber!.name}'}',
+                style: const TextStyle(color: AppColors.silver, fontSize: 13.5),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF1DB),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE0A030)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.hourglass_bottom, color: Color(0xFF8A4B00)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        already == 0
+                            ? 'Nessuno in lista d\'attesa: saresti il primo'
+                            : already == 1
+                            ? '1 persona già in lista d\'attesa: saresti il 2°'
+                            : '$already persone già in lista d\'attesa: saresti il ${already + 1}°',
+                        style: const TextStyle(color: Color(0xFF4A2800), fontSize: 14.5, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Se l\'orario si libera, il posto viene assegnato in automatico al primo in lista '
+                'e lo trovi tra i tuoi appuntamenti.',
+                style: TextStyle(color: AppColors.silver, fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                height: 54,
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.pop(c, true),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.quiet,
+                    foregroundColor: AppColors.quietText,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  icon: const Icon(Icons.playlist_add),
+                  label: const Text('Mettimi in lista d\'attesa', style: TextStyle(fontWeight: FontWeight.w800)),
+                ),
+              ),
+              TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Scegli un altro orario')),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (join != true || !mounted) return;
+    // anche senza account, come per la prenotazione
+    final ok = await openBookingAuth(context);
+    if (!ok || !mounted) return;
+    try {
+      final entry = await _state.backend.joinWaitlist(serviceId: s.id, barberId: barberId, start: slot);
+      final mine = await _state.backend.myWaitlist();
+      final pos = mine.where((w) => w.id == entry.id).firstOrNull?.position;
+      if (!mounted) return;
+      showMessage(
+        context,
+        'Sei in lista d\'attesa${pos == null ? '' : ': sei il $pos°'}. Se si libera, il posto è tuo.',
+      );
+      await _loadSlots();
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
   }
 
   static const _dayW = 58.0, _dayGap = 8.0;
@@ -567,9 +672,18 @@ class _BookingScreenState extends State<BookingScreen> {
                         ? 'In questa data siamo chiusi.\nScegli un altro giorno.'
                         : 'Questo giorno è al completo.\nScegli un altro giorno.',
                   )
-                : _SlotGrid(groups: groups, selected: _slot, onSelect: (s) => setState(() => _slot = s)),
+                : _SlotGrid(
+                    groups: groups,
+                    selected: _slot,
+                    onSelect: (s) => setState(() => _slot = s),
+                    waiting: {
+                      for (final (s, isFree) in groups.values.expand((g) => g))
+                        if (!isFree) s: waitingFor(_waitCounts, s, _anyBarber ? null : _barber?.id),
+                    },
+                    onWaitlist: _canWait ? _waitlistSheet : null,
+                  ),
           ),
-          const _Legend(),
+          _Legend(waitlist: _canWait && free.length < all.length),
         ],
       ),
     );
@@ -920,12 +1034,23 @@ class _DayChip extends StatelessWidget {
 }
 
 /// Orario: libero (bordo verde), occupato (grigio e barrato) o scelto (nero).
+/// Un orario occupato si puo' toccare per mettersi in lista d'attesa
+/// ([onWaitlist]); il numerino indica quanti sono gia' in lista.
 class _SlotChip extends StatelessWidget {
-  const _SlotChip({required this.label, required this.selected, required this.onTap, this.free = true});
+  const _SlotChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.free = true,
+    this.waiting = 0,
+    this.onWaitlist,
+  });
   final String label;
   final bool selected;
   final bool free;
   final VoidCallback onTap;
+  final int waiting;
+  final VoidCallback? onWaitlist;
 
   @override
   Widget build(BuildContext context) {
@@ -942,26 +1067,53 @@ class _SlotChip extends StatelessWidget {
       );
     }
     return InkWell(
-      onTap: free ? onTap : null,
+      onTap: free ? onTap : onWaitlist,
       borderRadius: BorderRadius.circular(10),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: border, width: free && !selected ? 1.4 : 1),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: fg,
-            fontWeight: FontWeight.w800,
-            fontSize: 15,
-            decoration: free ? null : TextDecoration.lineThrough,
-            decorationColor: fg,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: border, width: free && !selected ? 1.4 : 1),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: fg,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                  decoration: free ? null : TextDecoration.lineThrough,
+                  decorationColor: fg,
+                ),
+              ),
+            ),
           ),
-        ),
+          // quanti sono in lista d'attesa per questo orario (solo il numero)
+          if (!free && waiting > 0)
+            Positioned(
+              top: -6,
+              right: -4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(color: _fewOrange, borderRadius: BorderRadius.circular(8)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.hourglass_bottom, size: 10, color: Colors.white),
+                    Text(
+                      '$waiting',
+                      style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w800),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -969,7 +1121,10 @@ class _SlotChip extends StatelessWidget {
 
 /// Legenda sotto gli orari.
 class _Legend extends StatelessWidget {
-  const _Legend();
+  const _Legend({this.waitlist = false});
+
+  /// Mostra il suggerimento per la lista d'attesa.
+  final bool waitlist;
 
   Widget _item(Widget mark, String text) => Row(
     mainAxisSize: MainAxisSize.min,
@@ -1009,6 +1164,11 @@ class _Legend extends StatelessWidget {
           ),
           'Pochi posti',
         ),
+        if (waitlist)
+          const Text(
+            'Orario occupato? Toccalo per la lista d\'attesa',
+            style: TextStyle(color: AppColors.white, fontSize: 12, fontWeight: FontWeight.w700),
+          ),
       ],
     ),
   );
@@ -1082,12 +1242,24 @@ class _PriceListRow extends StatelessWidget {
 /// Se gli orari sono troppi per restare leggibili (es. intervallo di 5 minuti)
 /// si sceglie prima l'ora e poi i minuti.
 class _SlotGrid extends StatefulWidget {
-  const _SlotGrid({required this.groups, required this.selected, required this.onSelect});
+  const _SlotGrid({
+    required this.groups,
+    required this.selected,
+    required this.onSelect,
+    this.waiting = const {},
+    this.onWaitlist,
+  });
 
   /// Orari per fascia: (orario, libero?).
   final Map<String, List<(DateTime, bool)>> groups;
   final DateTime? selected;
   final ValueChanged<DateTime> onSelect;
+
+  /// Persone in lista d'attesa per gli orari occupati.
+  final Map<DateTime, int> waiting;
+
+  /// Tocco su un orario occupato: lista d'attesa (null = non disponibile).
+  final ValueChanged<DateTime>? onWaitlist;
 
   @override
   State<_SlotGrid> createState() => _SlotGridState();
@@ -1183,6 +1355,8 @@ class _SlotGridState extends State<_SlotGrid> {
                         free: free,
                         selected: s == widget.selected,
                         onTap: () => widget.onSelect(s),
+                        waiting: widget.waiting[s] ?? 0,
+                        onWaitlist: widget.onWaitlist == null ? null : () => widget.onWaitlist!(s),
                       ),
                     ),
                 ],

@@ -387,6 +387,68 @@ void main() {
     expect((await saved()).total, service.price);
   });
 
+  test('lista d\'attesa: solo numeri al cliente, posto assegnato al primo, extra accettato dall\'admin', () async {
+    final barber = (await backend.fetchBarbers()).first;
+    final service = (await backend.fetchServices()).first;
+    final start = await freeSlot(barber, service, DateTime.now().add(const Duration(days: 1)));
+
+    // Anna prende l'orario
+    await signUp('anna@test.it');
+    final taken = await backend.book(barberId: barber.id, serviceId: service.id, start: start);
+    await backend.signOut();
+
+    // Bruno e Carlo si mettono in lista per lo stesso barbiere e orario
+    await signUp('bruno@test.it');
+    await backend.joinWaitlist(serviceId: service.id, barberId: barber.id, start: start);
+    await expectLater(
+      () => backend.joinWaitlist(serviceId: service.id, barberId: barber.id, start: start),
+      throwsA(isA<AppException>()), // gia' in lista
+    );
+    await backend.signOut();
+    await signUp('carlo@test.it');
+    await backend.joinWaitlist(serviceId: service.id, barberId: barber.id, start: start);
+    expect((await backend.myWaitlist()).single.position, 2);
+    // il cliente vede solo quanti sono, non chi
+    final counts = await backend.waitlistCounts(dayOnly(start), dayOnly(start).add(const Duration(days: 1)));
+    expect(waitingFor(counts, start, barber.id), 2);
+    // nessuna lista per un orario libero: si prenota e basta
+    final free = await freeSlot(barber, service, start.add(const Duration(hours: 1)));
+    await expectLater(
+      () => backend.joinWaitlist(serviceId: service.id, barberId: barber.id, start: free),
+      throwsA(isA<AppException>()),
+    );
+    // i nomi in lista li vede solo l'admin
+    await expectLater(() => backend.fetchWaitlist(dayOnly(start), start.add(const Duration(days: 1))),
+        throwsA(isA<AppException>()));
+    await backend.signOut();
+
+    // Anna annulla: il posto va da solo a Bruno, il primo in lista
+    await backend.signInWithEmail('anna@test.it', 'segreta1');
+    await backend.cancelAppointment(taken.id);
+    await backend.signOut();
+    await backend.signInWithEmail('bruno@test.it', 'segreta1');
+    expect((await backend.myAppointments()).where((a) => a.isUpcoming).single.start, start);
+    expect((await backend.myWaitlist()).single.status, WaitlistStatus.assigned);
+    await backend.signOut();
+
+    // Carlo ora e' il primo; l'admin lo accetta comunque, come extra
+    await backend.signInWithEmail('carlo@test.it', 'segreta1');
+    expect((await backend.myWaitlist()).single.position, 1);
+    await backend.signOut();
+    await backend.signInWithEmail(DemoBackend.adminEmail, DemoBackend.adminPassword);
+    Future<List<WaitlistEntry>> atStart() async =>
+        (await backend.fetchWaitlist(dayOnly(start), dayOnly(start).add(const Duration(days: 1))))
+            .where((w) => w.start == start)
+            .toList();
+    final waiting = await atStart();
+    expect(waiting.single.customerName, 'Mario Rossi');
+    final extra = await backend.acceptWaitlist(waiting.single.id);
+    expect(extra.extra, isTrue);
+    expect(extra.barberId, barber.id);
+    expect(extra.start, start);
+    expect(await atStart(), isEmpty);
+  });
+
   test('chiusura del negozio: niente prenotazioni quel giorno, orario speciale solo in fascia', () async {
     await backend.signInWithEmail(DemoBackend.adminEmail, DemoBackend.adminPassword);
     final barber = (await backend.fetchBarbers()).first;

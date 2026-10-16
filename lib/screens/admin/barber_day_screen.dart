@@ -9,6 +9,7 @@ import '../../theme.dart';
 import '../../widgets/common.dart';
 import 'agenda_actions.dart';
 import 'products_tab.dart';
+import 'waitlist_screen.dart';
 import 'walk_in_sheet.dart';
 
 /// Giornata di un barbiere (telefono, colori chiari): un appuntamento per
@@ -60,6 +61,14 @@ class _BarberDayScreenState extends State<BarberDayScreen> with AgendaActions {
             ..sort((x, y) => x.start.compareTo(y.start));
       _off = (results[1] as List<TimeOff>).where((t) => t.start.isBefore(next) && t.end.isAfter(_day)).toList();
       _debts = await _loadDebts(backend);
+      // in lista d'attesa oggi per questo barbiere (o per il primo disponibile)
+      try {
+        _waiting = (await backend.fetchWaitlist(_day, next))
+            .where((w) => w.fits(b.id) && w.start.isAfter(DateTime.now()))
+            .length;
+      } catch (_) {
+        _waiting = 0;
+      }
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -73,6 +82,9 @@ class _BarberDayScreenState extends State<BarberDayScreen> with AgendaActions {
       });
     }
   }
+
+  /// Persone in lista d'attesa per questa giornata.
+  int _waiting = 0;
 
   /// Pagamenti lasciati in sospeso nelle visite precedenti, per appuntamento.
   Map<String, List<Appointment>> _debts = {};
@@ -225,6 +237,18 @@ class _BarberDayScreenState extends State<BarberDayScreen> with AgendaActions {
       children.add(e.$3);
     }
     if (!nowPlaced && entries.isNotEmpty) children.add(_NowMarker(key: _nowKey, time: now));
+    if (_waiting > 0) {
+      children.insert(
+        0,
+        _WaitlistBanner(
+          count: _waiting,
+          onTap: () async {
+            await Navigator.of(context).push(fadeRoute(WaitlistScreen(day: _day)));
+            _load(silent: true);
+          },
+        ),
+      );
+    }
 
     final doneCount = kept.where((a) => a.status == AppointmentStatus.completed).length;
 
@@ -398,6 +422,49 @@ class _BarberDayScreenState extends State<BarberDayScreen> with AgendaActions {
   }
 }
 
+/// Avviso in cima alla giornata: quante persone sono in lista d'attesa.
+class _WaitlistBanner extends StatelessWidget {
+  const _WaitlistBanner({required this.count, required this.onTap});
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 10),
+    child: Material(
+      color: const Color(0xFFFFF1DB),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: Color(0xFFE0A030)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+          child: Row(
+            children: [
+              const Icon(Icons.hourglass_bottom, color: Color(0xFF8A4B00)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  count == 1 ? '1 persona in lista d\'attesa' : '$count persone in lista d\'attesa',
+                  style: const TextStyle(color: Color(0xFF4A2800), fontSize: 15, fontWeight: FontWeight.w800),
+                ),
+              ),
+              const Text(
+                'Vedi',
+                style: TextStyle(color: Color(0xFF8A4B00), fontSize: 14, fontWeight: FontWeight.w800),
+              ),
+              const Icon(Icons.chevron_right, color: Color(0xFF8A4B00)),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 /// "MATTINA" / "POMERIGGIO" sopra le schede.
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel(this.text);
@@ -501,6 +568,25 @@ class _VisitCard extends StatelessWidget {
                           style: const TextStyle(color: AgendaLight.sub, fontSize: 13.5, fontWeight: FontWeight.w500),
                         ),
                       ),
+                      // accettato dalla lista d'attesa anche se l'orario era pieno
+                      if (a.extra)
+                        Container(
+                          margin: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF1DB),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'EXTRA',
+                            style: TextStyle(
+                              color: Color(0xFF8A4B00),
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
                       Container(
                         width: 8,
                         height: 8,

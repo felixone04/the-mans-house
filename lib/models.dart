@@ -482,6 +482,9 @@ class Appointment {
   /// Prodotti venduti insieme all'appuntamento (si sommano al totale da pagare).
   double productsTotal;
 
+  /// Extra: accettato dalla lista d'attesa anche se l'orario era pieno.
+  bool extra;
+
   Appointment({
     required this.id,
     this.userId,
@@ -502,6 +505,7 @@ class Appointment {
     this.payment = PaymentStatus.unpaid,
     this.amountPaid = 0,
     this.productsTotal = 0,
+    this.extra = false,
   });
 
   factory Appointment.fromJson(Map<String, dynamic> j) => Appointment(
@@ -524,6 +528,7 @@ class Appointment {
     payment: paymentFromString(j['payment_status']),
     amountPaid: _num(j['amount_paid']),
     productsTotal: _num(j['products_total']),
+    extra: j['overbooked'] ?? false,
   );
 
   bool get isUpcoming => status == AppointmentStatus.confirmed && start.isAfter(DateTime.now());
@@ -544,6 +549,94 @@ class Appointment {
       ? total - collected
       : 0;
 }
+
+enum WaitlistStatus { waiting, assigned, accepted, cancelled }
+
+/// Richiesta in lista d'attesa per un orario occupato. Se l'orario si libera
+/// il posto va in automatico al primo in lista ([WaitlistStatus.assigned]);
+/// l'admin puo' anche accettarla comunque ([WaitlistStatus.accepted]).
+class WaitlistEntry {
+  WaitlistEntry({
+    required this.id,
+    this.userId = '',
+    this.customerName = '',
+    this.customerPhone = '',
+    this.serviceId,
+    required this.serviceName,
+    required this.durationMin,
+    this.price = 0,
+    this.barberId,
+    this.barberName = '',
+    required this.start,
+    this.status = WaitlistStatus.waiting,
+    this.appointmentId,
+    required this.createdAt,
+    this.position,
+  });
+
+  final String id;
+  final String userId;
+  final String customerName;
+  final String customerPhone;
+  final String? serviceId;
+  final String serviceName;
+  final int durationMin;
+  final double price;
+
+  /// null = primo barbiere disponibile.
+  final String? barberId;
+  final String barberName;
+  final DateTime start;
+  WaitlistStatus status;
+  String? appointmentId;
+  final DateTime createdAt;
+
+  /// Posizione in lista (1 = il prossimo), solo per le richieste in attesa.
+  final int? position;
+
+  DateTime get end => start.add(Duration(minutes: durationMin));
+
+  /// Vale per un posto di [barberId] (null: per qualunque barbiere)?
+  bool fits(String? barberId) => this.barberId == null || barberId == null || this.barberId == barberId;
+
+  static WaitlistStatus statusFrom(String? s) => switch (s) {
+    'assigned' => WaitlistStatus.assigned,
+    'accepted' => WaitlistStatus.accepted,
+    'cancelled' => WaitlistStatus.cancelled,
+    _ => WaitlistStatus.waiting,
+  };
+
+  factory WaitlistEntry.fromJson(Map<String, dynamic> j) => WaitlistEntry(
+    id: j['id'],
+    userId: j['user_id'] ?? '',
+    customerName: j['customer_name'] ?? '',
+    customerPhone: j['customer_phone'] ?? '',
+    serviceId: j['service_id'],
+    serviceName: j['service_name'] ?? '',
+    durationMin: (j['duration_min'] as num?)?.toInt() ?? 30,
+    price: _num(j['price']),
+    barberId: j['barber_id'],
+    barberName: j['barber_name'] ?? (j['barbers'] as Map?)?['name'] ?? '',
+    start: _dt(j['start_at']),
+    status: statusFrom(j['status']),
+    appointmentId: j['appointment_id'],
+    createdAt: _dt(j['created_at']),
+    position: (j['position'] as num?)?.toInt(),
+  );
+}
+
+/// Quanti sono in lista per ogni orario (senza nomi: e' cio' che vede il cliente).
+class WaitlistCount {
+  WaitlistCount(this.start, this.barberId, this.waiting);
+  final DateTime start;
+  final String? barberId;
+  final int waiting;
+}
+
+/// Persone in lista per l'orario [start] di [barberId] (null = qualunque barbiere).
+int waitingFor(List<WaitlistCount> counts, DateTime start, String? barberId) => counts
+    .where((c) => c.start == start && (c.barberId == null || barberId == null || c.barberId == barberId))
+    .fold(0, (n, c) => n + c.waiting);
 
 class Profile {
   String id;

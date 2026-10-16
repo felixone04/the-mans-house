@@ -139,6 +139,7 @@ class DemoBackend implements Backend {
 
     _seedAppointments();
     _seedProducts();
+    _seedWaitlist();
     // demo: due clienti dal banco hanno dato il consenso alle offerte
     _walkInMarketing.addAll(['Marco Rossi', 'Luca Bianchi']);
   }
@@ -186,6 +187,33 @@ class DemoBackend implements Backend {
           }
         }
       }
+    }
+  }
+
+  /// Demo: due clienti in lista per il primo orario occupato di domani.
+  void _seedWaitlist() {
+    final tomorrow = dayOnly(DateTime.now()).add(const Duration(days: 1));
+    final taken = _appointments
+        .where((a) => a.status == AppointmentStatus.confirmed && dayOnly(a.start) == tomorrow)
+        .firstOrNull;
+    if (taken == null) return;
+    final service = _services.firstWhere((s) => s.id == taken.serviceId);
+    for (final (i, name) in ['Savino Leonetti', 'Nicola Di Bari'].indexed) {
+      _waitlist.add(
+        WaitlistEntry(
+          id: _id(),
+          customerName: name,
+          customerPhone: '+39 333 ${2000000 + i}',
+          serviceId: service.id,
+          serviceName: service.name,
+          durationMin: service.durationMin,
+          price: service.price,
+          barberId: taken.barberId,
+          barberName: taken.barberName,
+          start: taken.start,
+          createdAt: DateTime.now().subtract(Duration(hours: 5 - i)),
+        ),
+      );
     }
   }
 
@@ -633,6 +661,7 @@ class DemoBackend implements Backend {
       throw AppException('Appuntamento gia\' chiuso o annullato');
     }
     a.status = AppointmentStatus.cancelled;
+    _promoteWaitlist();
   });
 
   @override
@@ -675,7 +704,190 @@ class DemoBackend implements Backend {
       ..barberName = barber.name
       ..start = start
       ..end = start.add(duration);
+    _promoteWaitlist(); // il vecchio orario si e' liberato
   }
+
+  // --- Lista d'attesa ---
+
+  final _waitlist = <WaitlistEntry>[];
+
+  /// Il barbiere e' libero per [minutes] da [start]? (stesse regole della prenotazione)
+  bool _isFree(Barber b, DateTime start, int minutes) {
+    final from = dayOnly(start), to = from.add(const Duration(days: 1));
+    final busy = [
+      for (final a in _appointments)
+        if (a.status == AppointmentStatus.confirmed && a.start.isBefore(to) && a.end.isAfter(from))
+          BusyInterval(a.barberId, a.start, a.end),
+      for (final t in _timeOff)
+        if (t.start.isBefore(to) && t.end.isAfter(from)) BusyInterval(t.barberId, t.start, t.end, timeOff: true),
+    ];
+    return availableSlots(barber: b, durationMin: minutes, day: start, busy: busy, stepMin: 1).contains(start);
+  }
+
+  /// Come promote_waitlist sul server: i posti liberi vanno ai primi in lista.
+  void _promoteWaitlist() {
+    final now = DateTime.now();
+    final queue = _waitlist.where((w) => w.status == WaitlistStatus.waiting && w.start.isAfter(now)).toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    for (final w in queue) {
+      final barber = _barbers
+          .where((b) => b.active && (w.barberId == null || b.id == w.barberId))
+          .where((b) => _isFree(b, w.start, w.durationMin))
+          .firstOrNull;
+      if (barber == null) continue;
+      final a = _appointmentFor(w, barber, notes: 'Dalla lista d\'attesa');
+      _appointments.add(a);
+      w
+        ..status = WaitlistStatus.assigned
+        ..appointmentId = a.id;
+    }
+  }
+
+  Appointment _appointmentFor(WaitlistEntry w, Barber b, {required String notes, bool extra = false}) => Appointment(
+    id: _id(),
+    userId: w.userId.isEmpty ? null : w.userId, // demo: clienti senza account
+    barberId: b.id,
+    barberName: b.name,
+    serviceId: w.serviceId,
+    serviceName: w.serviceName,
+    price: w.price,
+    start: w.start,
+    end: w.end,
+    customerName: w.customerName,
+    customerPhone: w.customerPhone,
+    notes: notes,
+    createdByAdmin: extra,
+    extra: extra,
+  );
+
+  int _position(WaitlistEntry w) =>
+      _waitlist
+          .where(
+            (o) =>
+                o.status == WaitlistStatus.waiting &&
+                o.start == w.start &&
+                o.createdAt.isBefore(w.createdAt) &&
+                o.fits(w.barberId),
+          )
+          .length +
+      1;
+
+  int _waitSeq = 0; // ordine di arrivo anche a parita' di orologio
+
+  @override
+  Future<WaitlistEntry> joinWaitlist({required String serviceId, String? barberId, required DateTime start}) =>
+      _delay(() {
+        final me = _current;
+        if (me == null) throw AppException('Devi accedere per metterti in lista');
+        final service = _services.firstWhere((s) => s.id == serviceId && s.active,
+            orElse: () => throw AppException('Servizio non disponibile'));
+        if (!start.isAfter(DateTime.now())) throw AppException('Orario gia\' passato');
+        if (_barbers.any(
+          (b) => b.active && (barberId == null || b.id == barberId) && _isFree(b, start, service.durationMin),
+        )) {
+          throw AppException('L\'orario e\' libero: puoi prenotarlo subito');
+        }
+        if (_waitlist.any((w) => w.userId == me.id && w.start == start && w.status == WaitlistStatus.waiting)) {
+          throw AppException('Sei gia\' in lista d\'attesa per questo orario');
+        }
+        final barber = barberId == null ? null : _barbers.firstWhere((b) => b.id == barberId);
+        final w = WaitlistEntry(
+          id: _id(),
+          userId: me.id,
+          customerName: me.fullName,
+          customerPhone: me.phone,
+          serviceId: service.id,
+          serviceName: service.name,
+          durationMin: service.durationMin,
+          price: service.price,
+          barberId: barberId,
+          barberName: barber?.name ?? '',
+          start: start,
+          createdAt: DateTime.now().add(Duration(microseconds: _waitSeq++)),
+        );
+        _waitlist.add(w);
+        return w;
+      });
+
+  @override
+  Future<void> leaveWaitlist(String id) => _delay(() {
+    final me = _current;
+    final w = _waitlist.where((w) => w.id == id && w.status == WaitlistStatus.waiting).firstOrNull;
+    if (me == null || w == null || (!me.isAdmin && w.userId != me.id)) {
+      throw AppException('Richiesta non trovata');
+    }
+    w.status = WaitlistStatus.cancelled;
+  });
+
+  @override
+  Future<List<WaitlistEntry>> myWaitlist() => _delay(() {
+    final me = _current;
+    if (me == null) return <WaitlistEntry>[];
+    final since = DateTime.now().subtract(const Duration(days: 1));
+    return [
+      for (final w in _waitlist)
+        if (w.userId == me.id && w.status != WaitlistStatus.cancelled && w.start.isAfter(since))
+          WaitlistEntry(
+            id: w.id,
+            userId: w.userId,
+            serviceId: w.serviceId,
+            serviceName: w.serviceName,
+            durationMin: w.durationMin,
+            price: w.price,
+            barberId: w.barberId,
+            barberName: w.barberName,
+            start: w.start,
+            status: w.status,
+            appointmentId: w.appointmentId,
+            createdAt: w.createdAt,
+            position: w.status == WaitlistStatus.waiting ? _position(w) : null,
+          ),
+    ]..sort((a, b) => a.start.compareTo(b.start));
+  });
+
+  @override
+  Future<List<WaitlistCount>> waitlistCounts(DateTime from, DateTime to) => _delay(() {
+    final now = DateTime.now();
+    final counts = <(DateTime, String?), int>{};
+    for (final w in _waitlist) {
+      if (w.status != WaitlistStatus.waiting || !w.start.isAfter(now)) continue;
+      if (w.start.isBefore(from) || !w.start.isBefore(to)) continue;
+      counts.update((w.start, w.barberId), (n) => n + 1, ifAbsent: () => 1);
+    }
+    return [for (final e in counts.entries) WaitlistCount(e.key.$1, e.key.$2, e.value)];
+  });
+
+  @override
+  Future<List<WaitlistEntry>> fetchWaitlist(DateTime from, DateTime to) => _delay(() {
+    _admin();
+    return _waitlist
+        .where((w) => w.status == WaitlistStatus.waiting && !w.start.isBefore(from) && w.start.isBefore(to))
+        .toList()
+      ..sort((a, b) => a.start != b.start ? a.start.compareTo(b.start) : a.createdAt.compareTo(b.createdAt));
+  });
+
+  @override
+  Future<Appointment> acceptWaitlist(String id) => _delay(() {
+    _admin();
+    final w = _waitlist.firstWhere(
+      (w) => w.id == id && w.status == WaitlistStatus.waiting,
+      orElse: () => throw AppException('Richiesta non trovata'),
+    );
+    // barbiere scelto dal cliente, altrimenti uno a caso tra chi lavora a quell'ora
+    final active = _barbers.where((b) => b.active).toList();
+    final from = w.start.hour * 60 + w.start.minute, to = from + w.durationMin;
+    final working = active.where((b) => b.hoursOn(w.start).any((h) => h.start <= from && h.end >= to)).toList();
+    final pool = working.isEmpty ? active : working;
+    final barber = w.barberId != null
+        ? _barbers.firstWhere((b) => b.id == w.barberId)
+        : pool[_rand.nextInt(pool.length)];
+    final a = _appointmentFor(w, barber, notes: 'Accettato dalla lista d\'attesa', extra: true);
+    _appointments.add(a);
+    w
+      ..status = WaitlistStatus.accepted
+      ..appointmentId = a.id;
+    return a;
+  });
 
   @override
   Future<List<Appointment>> myAppointments() => _delay(

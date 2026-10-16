@@ -8,6 +8,7 @@ import 'barbers_tab.dart';
 import 'customers_tab.dart';
 import 'products_tab.dart';
 import 'search_screen.dart';
+import 'waitlist_screen.dart';
 import 'services_tab.dart';
 import 'settings_tab.dart';
 
@@ -28,7 +29,26 @@ class _AdminScreenState extends State<AdminScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadLowStock());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadLowStock();
+      _loadWaiting();
+    });
+  }
+
+  /// Persone in lista d'attesa nei prossimi giorni: numero sulla clessidra.
+  int _waiting = 0;
+
+  Future<void> _loadWaiting() async {
+    final state = AppScope.read(context);
+    if (!state.isAdmin) return;
+    try {
+      final now = DateTime.now();
+      final list = await state.backend.fetchWaitlist(now, now.add(const Duration(days: 61)));
+      final n = list.where((w) => w.start.isAfter(now)).length;
+      if (mounted && n != _waiting) setState(() => _waiting = n);
+    } catch (_) {
+      // solo un promemoria
+    }
   }
 
   Future<void> _loadLowStock() async {
@@ -82,6 +102,19 @@ class _AdminScreenState extends State<AdminScreen> {
     final wide = width >= 900;
     // ricerca veloce clienti, sempre a portata da ogni sezione
     final actions = [
+      IconButton(
+        tooltip: 'Lista d\'attesa',
+        icon: Badge(
+          isLabelVisible: _waiting > 0,
+          label: Text('$_waiting'),
+          backgroundColor: AppColors.warning,
+          child: const Icon(Icons.hourglass_bottom),
+        ),
+        onPressed: () async {
+          await Navigator.of(context).push(fadeRoute(const WaitlistScreen()));
+          _loadWaiting();
+        },
+      ),
       IconButton(
         tooltip: 'Cerca cliente',
         icon: const Icon(Icons.search),
