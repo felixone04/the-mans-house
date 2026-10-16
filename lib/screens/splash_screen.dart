@@ -4,6 +4,7 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'home_screen.dart';
+import 'welcome_screen.dart';
 
 /// Apertura: logo su sfondo nero sfumato, mentre si caricano i dati.
 class SplashScreen extends StatefulWidget {
@@ -31,8 +32,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         state.load(),
         Future<void>.delayed(const Duration(milliseconds: 2000)),
       ]);
+      // alla prima apertura il benvenuto, poi sempre la home
+      final welcome = await shouldShowWelcome();
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(fadeRoute(const HomeScreen()));
+      Navigator.of(context).pushReplacement(fadeRoute(welcome ? const WelcomeScreen() : const HomeScreen()));
     } catch (_) {
       if (mounted) setState(() => _failed = true);
     }
