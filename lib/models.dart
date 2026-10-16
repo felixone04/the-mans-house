@@ -26,6 +26,12 @@ class ShopSettings {
   int minCancelHours;
   bool remindersEnabled;
 
+  /// Notifiche: attive/disattive, testi e tempi per tipo (vedi notifications.dart).
+  Map<String, dynamic> notifications;
+
+  /// Link per lasciare una recensione su Google (dopo il taglio, con 4-5 stelle).
+  String googleReviewUrl;
+
   ShopSettings({
     this.name = "The Man's House",
     this.tagline = 'Barber Shop · Andria',
@@ -39,7 +45,9 @@ class ShopSettings {
     this.bookingDaysAhead = 30,
     this.minCancelHours = 2,
     this.remindersEnabled = true,
-  });
+    Map<String, dynamic>? notifications,
+    this.googleReviewUrl = '',
+  }) : notifications = notifications ?? {};
 
   factory ShopSettings.fromJson(Map<String, dynamic> j) => ShopSettings(
     name: j['name'] ?? '',
@@ -54,6 +62,8 @@ class ShopSettings {
     bookingDaysAhead: j['booking_days_ahead'] ?? 30,
     minCancelHours: j['min_cancel_hours'] ?? 2,
     remindersEnabled: j['reminders_enabled'] ?? true,
+    notifications: j['notifications'] is Map ? Map<String, dynamic>.from(j['notifications'] as Map) : {},
+    googleReviewUrl: j['google_review_url'] ?? '',
   );
 
   Map<String, dynamic> toJson() => {
@@ -69,6 +79,8 @@ class ShopSettings {
     'booking_days_ahead': bookingDaysAhead,
     'min_cancel_hours': minCancelHours,
     'reminders_enabled': remindersEnabled,
+    'notifications': notifications,
+    'google_review_url': googleReviewUrl,
   };
 
   ShopSettings copy() => ShopSettings.fromJson(toJson());

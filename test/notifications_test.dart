@@ -1,0 +1,41 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:the_mans_house/models.dart';
+import 'package:the_mans_house/notifications.dart';
+
+void main() {
+  test('segnaposto: si sostituiscono quelli noti, gli altri restano', () {
+    expect(fillNotif('{giorno} · {ora} con {barbiere}', {'giorno': 'sab 17', 'ora': '10:30', 'barbiere': 'Antonio'}),
+        'sab 17 · 10:30 con Antonio');
+    expect(fillNotif('Ciao {sconosciuto}', {}), 'Ciao {sconosciuto}');
+  });
+
+  test('preferenze: testi di partenza, testi modificati, notifiche spente', () {
+    final n = NotifSettings();
+    expect(n.enabled(NotifKind.reminderDay), isTrue);
+    expect(n.offset(NotifKind.reminderDay), 24 * 60);
+    expect(n.offset(NotifKind.attendanceCheck), 18 * 60);
+    expect(n.build(NotifKind.bookingConfirmed, notifSample)!.body, 'sab 17 ott · 10:30 · Taglio con Antonio');
+
+    n.prefs['reminderHour'] = NotifPref(title: 'Ci vediamo alle {ora}', offset: 30);
+    n.prefs['news'] = NotifPref(enabled: false);
+    expect(n.build(NotifKind.reminderHour, notifSample)!.title, 'Ci vediamo alle 10:30');
+    expect(n.offset(NotifKind.reminderHour), 30);
+    expect(n.build(NotifKind.news, notifSample), isNull);
+
+    // si salva nelle impostazioni del negozio e si rilegge uguale
+    final s = ShopSettings()..notifications = n.toJson();
+    final back = NotifSettings.fromJson(ShopSettings.fromJson(s.toJson()).notifications);
+    expect(back.title(NotifKind.reminderHour), 'Ci vediamo alle {ora}');
+    expect(back.enabled(NotifKind.news), isFalse);
+    expect(back.enabled(NotifKind.review), isTrue);
+  });
+
+  test('ogni tipo ha testi e un segnaposto valido', () {
+    expect(notifTypes.map((t) => t.kind).toSet().length, NotifKind.values.length);
+    for (final t in notifTypes) {
+      for (final m in RegExp(r'\{(\w+)\}').allMatches('${t.title} ${t.body}')) {
+        expect(t.placeholders, contains(m.group(1)), reason: '${t.label}: {${m.group(1)}}');
+      }
+    }
+  });
+}

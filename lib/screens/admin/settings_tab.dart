@@ -6,7 +6,9 @@ import '../../models.dart';
 import '../../state/app_state.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
+import '../../notifications.dart';
 import 'export_sheet.dart';
+import 'notifications_screen.dart';
 import 'shop_days_screen.dart';
 
 /// Informazioni del locale, regole di prenotazione, promemoria e amministratori.
@@ -38,6 +40,7 @@ class _SettingsTabState extends State<SettingsTab> {
     _c['step'] = TextEditingController(text: '${_s.slotStepMin}');
     _c['days'] = TextEditingController(text: '${_s.bookingDaysAhead}');
     _c['cancel'] = TextEditingController(text: '${_s.minCancelHours}');
+    _c['review'] = TextEditingController(text: _s.googleReviewUrl);
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadAdmins());
   }
 
@@ -67,7 +70,8 @@ class _SettingsTabState extends State<SettingsTab> {
       ..instagram = _c['instagram']!.text.trim().replaceAll('@', '')
       ..slotStepMin = int.parse(_c['step']!.text)
       ..bookingDaysAhead = int.parse(_c['days']!.text)
-      ..minCancelHours = int.parse(_c['cancel']!.text);
+      ..minCancelHours = int.parse(_c['cancel']!.text)
+      ..googleReviewUrl = _c['review']!.text.trim();
     setState(() => _saving = true);
     final state = AppScope.read(context);
     try {
@@ -160,6 +164,7 @@ class _SettingsTabState extends State<SettingsTab> {
     _c['step']!.text = '${_s.slotStepMin}';
     _c['days']!.text = '${_s.bookingDaysAhead}';
     _c['cancel']!.text = '${_s.minCancelHours}';
+    _c['review']!.text = _s.googleReviewUrl;
   }
 
   /// Sezione modificabile in un pannello: la pagina resta senza scorrimento.
@@ -250,6 +255,13 @@ class _SettingsTabState extends State<SettingsTab> {
               _field('phone', 'Telefono', icon: Icons.call_outlined, type: TextInputType.phone),
               _field('whatsapp', 'WhatsApp del negozio', icon: Icons.chat_outlined, type: TextInputType.phone),
               _field('instagram', 'Instagram (mostrato nella home)', icon: Icons.camera_alt_outlined, hint: 'nomeutente'),
+              _field(
+                'review',
+                'Link recensioni Google',
+                icon: Icons.star_outline,
+                type: TextInputType.url,
+                hint: 'https://g.page/r/…/review',
+              ),
             ]),
           ),
           tile(
@@ -264,6 +276,19 @@ class _SettingsTabState extends State<SettingsTab> {
               const SizedBox(height: 12),
               Row(children: [_number('cancel', 'Annullabile fino a', 'ore prima', 0, 72)]),
             ]),
+          ),
+          tile(
+            Icons.notifications_active_outlined,
+            'Notifiche',
+            () {
+              final n = NotifSettings.fromJson(state.settings.notifications);
+              final on = notifTypes.where((t) => n.enabled(t.kind)).length;
+              return '$on di ${notifTypes.length} attive · testi e orari modificabili';
+            }(),
+            onTap: () async {
+              await Navigator.of(context).push(fadeRoute(const NotificationsScreen()));
+              if (mounted) setState(() => _s = AppScope.read(context).settings.copy());
+            },
           ),
           tile(
             Icons.chat_outlined,
