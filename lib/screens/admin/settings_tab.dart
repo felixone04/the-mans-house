@@ -237,28 +237,17 @@ class _SettingsTabState extends State<SettingsTab> {
     );
 
     // voci a grandezza normale, raggruppate; su tablet e computer in due colonne
-    Widget group(String title, List<Widget> tiles) => LayoutBuilder(
-      builder: (context, c) {
-        final two = c.maxWidth >= 700;
-        final w = two ? (c.maxWidth - 12) / 2 : c.maxWidth;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SectionTitle(title),
-            Wrap(
-              spacing: 12,
-              children: [for (final t in tiles) SizedBox(width: w, child: t)],
-            ),
-          ],
-        );
-      },
+    Widget group(String title, List<Widget> tiles) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [SectionTitle(title), ...tiles],
     );
 
+    // come Servizi e Barbieri: una colonna a grandezza normale, scorre se serve
     return ListView(
       padding: const EdgeInsets.only(bottom: 32),
       children: [
         ResponsiveCenter(
-          maxWidth: 900,
+          maxWidth: 800,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
